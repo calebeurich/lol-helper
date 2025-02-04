@@ -1,7 +1,24 @@
 import pandas as pd
 import os
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 print(RIOT_API_KEY)
+
+def main():
+    user_input = input("Please provide input") #What are we searching for
+    search = get_function(query = user_input)  #Where we are searching it
+    for user_input in search:
+        print(f"*{user_input}")
+
+def get_function(query):
+    try:
+        response = requests.get("")  #Insert API link here
+        response.raise_for_status()
+    except requests.HTTPSError:
+        print("Couldn't complete request")  
+    dataset = response.json()
+    return[iterable["parameter"] for iterable in dataset["key"]] #parameter = desired output (DOCUMENTATION) / key = where output is found (DOCUMENTATION)
+     
