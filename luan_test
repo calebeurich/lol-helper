@@ -7,6 +7,8 @@ load_dotenv()
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 print(RIOT_API_KEY)
 
+#api_url = api_url +
+
 def main():
     user_input = input("Please provide input") #What are we searching for
     search = get_function(query = user_input)  #Where we are searching it
@@ -15,10 +17,16 @@ def main():
 
 def get_function(query):
     try:
-        response = requests.get("")  #Insert API link here
+        response = requests.get("", query)  #Insert API link here
         response.raise_for_status()
-    except requests.HTTPSError:
+    except requests.HTTPError:
         print("Couldn't complete request")  
     dataset = response.json()
     return[iterable["parameter"] for iterable in dataset["key"]] #parameter = desired output (DOCUMENTATION) / key = where output is found (DOCUMENTATION)
      
+
+#def get_puuid():
+
+
+#Create variable for match ids (list)
+#Parameters= startTime, queue(int for id), type(string for queue type), count(into for number of match ids)
