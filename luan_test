@@ -3,29 +3,67 @@ import os
 import requests
 from dotenv import load_dotenv
 
+#.env variables; API key and my own IGN + tag
 load_dotenv()
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
-print(RIOT_API_KEY)
+my_game_name = os.getenv("my_game_name")
+my_tag_line = os.getenv("my_tag_line")
 
-#api_url = api_url +
+#variable to input API key in the header of request instead of query
+headers = {
+    "X-Riot-Token" : RIOT_API_KEY
+}
 
+
+#placeholder function that might eventually call multiple functions whenif a purpose for this commit is established
 def main():
     user_input = input("Please provide input") #What are we searching for
     search = get_function(query = user_input)  #Where we are searching it
     for user_input in search:
         print(f"*{user_input}")
-
+#API call blueprint, will delete later
 def get_function(query):
     try:
-        response = requests.get("", query)  #Insert API link here
-        response.raise_for_status()
+        resp = requests.get("", query)  #Insert API link here
+        resp.raise_for_status()
     except requests.HTTPError:
         print("Couldn't complete request")  
-    dataset = response.json()
+    dataset = resp.json()
     return[iterable["parameter"] for iterable in dataset["key"]] #parameter = desired output (DOCUMENTATION) / key = where output is found (DOCUMENTATION)
      
+#function to use RiotID (name + tag) to obtain unique player identifier (puuid) that is used a lot in many APIs
+#tested and is functional
+def get_puuid(game_name, tag_line):
+    api_url = f"https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
+    try:
+        resp = requests.get(api_url, headers=headers )  #Insert API link here
+        resp.raise_for_status()
+    except requests.HTTPError:
+        print("Couldn't complete request")   
+    player_info = resp.json()
+    return player_info["puuid"]
 
-#def get_puuid():
+#function to use puuid to get a list of the match ids of the last 20 games played
+#parametes default to last 20 games but can go up to 100
+#tested and is functional
+def get_match_ids():
+    puuid = get_puuid(my_game_name, my_tag_line)
+    api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count=20"
+    try:
+        resp = requests.get(api_url, headers=headers)
+        resp.raise_for_status()
+    except requests.HTTPError:
+        print("Couldn't complete request")
+    match_list = resp.json()
+    print(match_list[0])
+
+get_match_ids()
+
+def question_mark_ping():
+    sample = get_match_ids()
+    api_url = f""
+    
+    #return[iterable["parameter"] for iterable in player_info["key"]] 
 
 
 #Create variable for match ids (list)
