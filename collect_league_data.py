@@ -21,25 +21,6 @@ tiers = ["I", "II", "III", "IV"]
 
 pd.set_option('display.max_columns', None)
 
-# Add these global variables near the top of the file, after the constants
-global_api_calls = 0
-global_start_time = time.time()
-
-def check_rate_limit():
-    """Helper function to handle rate limiting across all API calls"""
-    global global_api_calls, global_start_time
-    
-    global_api_calls += 1
-    if global_api_calls >= 95:  # Buffer of 5 requests
-        elapsed = time.time() - global_start_time
-        if elapsed < 120:
-            sleep_time = 120 - elapsed + 1
-            tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
-            time.sleep(sleep_time)
-        global_start_time = time.time()
-        global_api_calls = 0
-    time.sleep(0.05)  # Ensure we don't exceed 20 requests/sec
-
 def get_summoner_ids_from_api(api_url, req_type):
     time.sleep(0.05)  # Ensure we don't exceed 20 requests/sec
     summoner_ids = []
@@ -120,15 +101,29 @@ def get_all_wanted_sums():
 def get_puuid(csv_only_summ_ids):
     df_only_summ_ids = pd.read_csv(csv_only_summ_ids, index_col=False)
     
+    # Track API calls for rate limiting
+    start_time = time.time()
+    api_calls = 0
+    
     # Create progress bar
     pbar = tqdm(total=len(df_only_summ_ids), desc="Fetching PUUIDs")
     
     for index, row in df_only_summ_ids.iterrows():
+        # Rate limit handling
+        api_calls += 1
+        if api_calls >= 95:  # Buffer of 5 requests
+            elapsed = time.time() - start_time
+            if elapsed < 120:
+                sleep_time = 120 - elapsed + 1
+                tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+                time.sleep(sleep_time)
+            start_time = time.time()
+            api_calls = 0
+            
         summoner_id = row["summonerId"]
         api_url = f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/{summoner_id}"
         
         try:
-            check_rate_limit()
             resp = requests.get(api_url, headers=headers)
             resp.raise_for_status()
             summoner_info = resp.json()
@@ -137,6 +132,7 @@ def get_puuid(csv_only_summ_ids):
             tqdm.write(f"Error fetching puuid for {summoner_id}: {e}")
         
         pbar.update(1)
+        time.sleep(0.05)  # Ensure we don't exceed 20 requests/sec
     
     pbar.close()
     df_only_summ_ids.to_csv(csv_only_summ_ids, index=False)
@@ -145,6 +141,10 @@ def get_match_ids(csv_summids_and_puuids, current_patch):
     df_summoners = pd.read_csv(csv_summids_and_puuids)
     df_all_matches = pd.DataFrame(columns=["summonerId", "puuid", "matchId", "matchData"])
     batch_size = 100  # Max matches we can request at once
+    
+    # Track API calls for rate limiting
+    start_time = time.time()
+    api_calls = 0
     
     # Create progress bar
     pbar = tqdm(total=len(df_summoners), desc="Fetching matches")
@@ -156,10 +156,20 @@ def get_match_ids(csv_summids_and_puuids, current_patch):
         found_old_patch = False
         
         while not found_old_patch:
+            # Rate limit handling for match history request
+            api_calls += 1
+            if api_calls >= 95:
+                elapsed = time.time() - start_time
+                if elapsed < 120:
+                    sleep_time = 120 - elapsed + 1
+                    tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+                    time.sleep(sleep_time)
+                start_time = time.time()
+                api_calls = 0
+                
             match_history_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start_index}&count={batch_size}"
             
             try:
-                check_rate_limit()
                 resp = requests.get(match_history_api_url, headers=headers)
                 resp.raise_for_status()
                 match_ids = resp.json()
@@ -169,8 +179,18 @@ def get_match_ids(csv_summids_and_puuids, current_patch):
                     break
                 
                 for match_id in match_ids:
+                    # Rate limit handling for match data request
+                    api_calls += 1
+                    if api_calls >= 95:
+                        elapsed = time.time() - start_time
+                        if elapsed < 120:
+                            sleep_time = 120 - elapsed + 1
+                            tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+                            time.sleep(sleep_time)
+                        start_time = time.time()
+                        api_calls = 0
+                        
                     match_data_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/{match_id}"
-                    check_rate_limit()
                     response = requests.get(match_data_api_url, headers=headers)
                     match_data = response.json()
                     
@@ -188,6 +208,8 @@ def get_match_ids(csv_summids_and_puuids, current_patch):
                         # Found an older patch, no need to look further for this player
                         found_old_patch = True
                         break
+                    
+                    time.sleep(0.05)  # Ensure we don't exceed 20 requests/sec
                 
                 if found_old_patch:
                     break
@@ -332,10 +354,16 @@ def main():
     sums_df = pd.DataFrame({"summonerId": all_wanted_sum_ids})
     sums_df.to_csv("all_wanted_summoner_ids.csv", index=False)
     tqdm.write("Saved summoner IDs to CSV")
+    sleep_time = 120 #sleep between functions to reset rate limit
+    tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+    time.sleep(sleep_time)
 
     # 2. Get PUUIDs for all summoners
     get_puuid("all_wanted_summoner_ids.csv")
     tqdm.write("Added PUUIDs to CSV")
+    sleep_time = 120 #sleep between functions to reset rate limit
+    tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+    time.sleep(sleep_time)
 
     # 3. Get match data
     get_match_ids("all_wanted_summoner_ids.csv", CURRENT_PATCH)
