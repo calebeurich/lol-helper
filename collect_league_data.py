@@ -141,12 +141,25 @@ def collect_match_ids(summoner_data_file: str) -> None:
     start_time = time.time()
     
     for _, row in tqdm(df_summoners.iterrows(), total=len(df_summoners), desc="Fetching match IDs"):
+        # Skip if PUUID is missing or "Not Found"
+        if pd.isna(row['puuid']) or row['puuid'] == "Not Found":
+            tqdm.write(f"Skipping summoner {row['summonerId']} - no valid PUUID")
+            continue
+            
         api_calls, start_time = handle_rate_limit(api_calls, start_time)
         
         match_history_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{row['puuid']}/ids?start=0&count={matches_per_summoner}"
         
         try:
-            match_ids = requests.get(match_history_url, headers=HEADERS).json()
+            response = requests.get(match_history_url, headers=HEADERS)
+            response.raise_for_status()
+            
+            # Check if response content is empty
+            if not response.content:
+                tqdm.write(f"Empty response for puuid: {row['puuid']}")
+                continue
+                
+            match_ids = response.json()
             
             # Create DataFrame rows for each match ID
             if match_ids:
@@ -162,6 +175,16 @@ def collect_match_ids(summoner_data_file: str) -> None:
             time.sleep(0.05)
             api_calls += 1
                 
+        except requests.HTTPError as e:
+            tqdm.write(f"HTTP Error for puuid {row['puuid']}: {e}")
+            if e.response.status_code == 429:  # Rate limit exceeded
+                sleep_time = int(e.response.headers.get('Retry-After', 120))
+                tqdm.write(f"Rate limit exceeded. Sleeping for {sleep_time} seconds")
+                time.sleep(sleep_time)
+                api_calls = 0
+                start_time = time.time()
+        except json.JSONDecodeError as e:
+            tqdm.write(f"Invalid JSON response for puuid {row['puuid']}: {e}")
         except requests.RequestException as e:
             tqdm.write(f"Error fetching match IDs for {row['puuid']}: {e}")
     
