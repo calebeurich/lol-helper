@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import time
 from tqdm import tqdm
 from typing import List, Optional
+import numpy as np
 
 # Load environment variables and set up
 load_dotenv()
@@ -131,11 +132,14 @@ def get_puuid(summoner_ids_file: str) -> None:
     
     df.to_csv(summoner_ids_file, index=False)
 
-def collect_match_ids(summoner_data_file: str) -> None:
-    """Collect match IDs for summoners"""
+def collect_match_ids(summoner_data_file: str, matches_per_summoner: int = 5) -> None:
+    """Collect match IDs for summoners
+    Args:
+        summoner_data_file: Path to file containing summoner data
+        matches_per_summoner: Number of most recent matches to collect per summoner (default: 5)
+    """
     df_summoners = pd.read_csv(summoner_data_file)
     df_match_ids = pd.DataFrame(columns=["summonerId", "puuid", "matchId"])
-    matches_per_summoner = 100
     
     api_calls = 0
     start_time = time.time()
@@ -206,48 +210,90 @@ def collect_match_data(match_ids_file: str, current_patch: str) -> None:
         match_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/{row['matchId']}"
         
         try:
-            match_data = requests.get(match_url, headers=HEADERS).json()
+            response = requests.get(match_url, headers=HEADERS)
+            response.raise_for_status()
+            match_data = response.json()
             
-            # Check if match is from current patch
-            game_patch = (match_data["info"]["gameVersion"].split("."))[0] + "." + (match_data["info"]["gameVersion"].split("."))[1]
-            if game_patch == current_patch:
-                new_row = {
-                    "matchId": row["matchId"],
-                    "matchData": json.dumps(match_data)
-                }
-                df_match_data = pd.concat([df_match_data, pd.DataFrame([new_row])], ignore_index=True)
+            # Check if response has the expected structure
+            if "info" in match_data and "gameVersion" in match_data["info"]:
+                game_patch = (match_data["info"]["gameVersion"].split("."))[0] + "." + (match_data["info"]["gameVersion"].split("."))[1]
+                if game_patch == current_patch:
+                    new_row = {
+                        "matchId": row["matchId"],
+                        "matchData": json.dumps(match_data)
+                    }
+                    df_match_data = pd.concat([df_match_data, pd.DataFrame([new_row])], ignore_index=True)
+            else:
+                tqdm.write(f"Unexpected response structure for match {row['matchId']}")
             
             time.sleep(0.05)
             api_calls += 1
                 
         except requests.RequestException as e:
             tqdm.write(f"Error fetching match data for {row['matchId']}: {e}")
+        except json.JSONDecodeError as e:
+            tqdm.write(f"Invalid JSON response for match {row['matchId']}: {e}")
+        except KeyError as e:
+            tqdm.write(f"Unexpected data structure for match {row['matchId']}: {e}")
     
     df_match_data.to_csv(MATCH_DATA_FILE, index=False)
     tqdm.write(f"Match data statistics:\n{df_match_data.nunique()}")
 
+def create_small_match_ids(match_ids_file: str, matches_per_summoner: int = 5, sample_fraction: float = 0.25) -> None:
+    """Create a smaller match IDs file with limited matches per summoner and sampled PUUIDs
+    Args:
+        match_ids_file: Path to original match IDs file
+        matches_per_summoner: Number of most recent matches to keep per summoner
+        sample_fraction: Fraction of PUUIDs to keep (default: 0.25 for 25%)
+    """
+    df = pd.read_csv(match_ids_file)
+    
+    # Get unique PUUIDs and randomly sample a fraction of them
+    unique_puuids = df['puuid'].unique()
+    sample_size = int(len(unique_puuids) * sample_fraction)
+    sampled_puuids = np.random.choice(unique_puuids, size=sample_size, replace=False)
+    
+    # Filter dataframe to only include sampled PUUIDs
+    df_sampled = df[df['puuid'].isin(sampled_puuids)]
+    
+    # Sort matches within each PUUID group to ensure most recent are first
+    # Match IDs are chronological - higher values are more recent
+    df_sampled = df_sampled.sort_values(['puuid', 'matchId'], ascending=[True, False])
+    
+    # Group by puuid and keep only the first n matches (most recent) for each
+    df_small = df_sampled.groupby('puuid').head(matches_per_summoner)
+    
+    # Save the smaller dataset
+    df_small.to_csv("match_ids_small.csv", index=False)
+    tqdm.write(f"Created smaller match IDs file with {len(df_small)} matches")
+    tqdm.write(f"Unique summoners: {df_small['puuid'].nunique()} (from original {len(unique_puuids)})")
+
 def main(start_phase: str = "summoner_ids") -> None:
     """Main execution function with configurable starting phase"""
-    if start_phase == "summoner_ids":
+    if start_phase == "create_small":
+        create_small_match_ids(MATCH_IDS_FILE)
+        collect_match_data("match_ids_small.csv", CURRENT_PATCH)
+    
+    elif start_phase == "summoner_ids":
         collect_summoner_ids()
         time.sleep(120)  # Rate limit break
         
         get_puuid(SUMMONER_IDS_FILE)
         time.sleep(120)  # Rate limit break
         
-        collect_match_ids(SUMMONER_PUUID_FILE)
+        collect_match_ids(SUMMONER_PUUID_FILE, matches_per_summoner=5)
         time.sleep(120)  # Rate limit break
         
-        collect_match_data(MATCH_IDS_FILE, CURRENT_PATCH)
+        collect_match_data("match_ids_small.csv", CURRENT_PATCH)
     
     elif start_phase == "match_ids":
-        collect_match_ids(SUMMONER_PUUID_FILE)
+        collect_match_ids(SUMMONER_PUUID_FILE, matches_per_summoner=5)
         time.sleep(120)  # Rate limit break
         
-        collect_match_data(MATCH_IDS_FILE, CURRENT_PATCH)
+        collect_match_data("match_ids_small.csv", CURRENT_PATCH)
     
     elif start_phase == "match_data":
-        collect_match_data(MATCH_IDS_FILE, CURRENT_PATCH)
+        collect_match_data("match_ids_small.csv", CURRENT_PATCH)
 
 if __name__ == "__main__":
-    main(start_phase="match_ids")  # Change this to control where to start 
+    main(start_phase="create_small")  # This will create small file and then collect match data 
