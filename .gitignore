@@ -1,5 +1,6 @@
 # tiles too big for github
 match_ids.csv
+match_data.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
