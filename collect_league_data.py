@@ -152,7 +152,8 @@ def collect_match_ids(summoner_data_file: str, matches_per_summoner: int = 5) ->
             
         api_calls, start_time = handle_rate_limit(api_calls, start_time)
         
-        match_history_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{row['puuid']}/ids?start=0&count={matches_per_summoner}"
+        # match_history_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{row['puuid']}/ids?start=0&count={matches_per_summoner}"
+        match_history_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{row['puuid']}/ids?queue=420&start=0&count={matches_per_summoner}"
         
         try:
             response = requests.get(match_history_url, headers=HEADERS)
