@@ -6,537 +6,273 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import silhouette_score
+import pickle
 
 # %%
 #%pip install seaborn
 
 # %%
-# Read the data
-df = pd.read_csv('../data_processing/champion_stats.csv')
+# Read the data and filter out low playrate champions
+df = pd.read_csv('data_processing/champion_stats.csv')
+df = df[df['total_games_played_in_role'] >= 5]  # Filter out champions with fewer than 5 games
 
 # Select features for clustering
 features = [
-    # Combat Stats
-    'kills', 'deaths', 'assists', 'kda',
-    'doubleKills', 'tripleKills', 'quadraKills', 'pentaKills',
-    'challenges_killParticipation', 'challenges_takedowns',
-    'challenges_soloKills', 'challenges_quickSoloKills',
-    'challenges_outnumberedKills', 'challenges_takedownsAfterGainingLevelAdvantage',
+    # Core Stats
+    'avg_kills', 'avg_deaths', 'avg_assists', 'kda',
+    'avg_kill_participation', 'avg_takedowns',
+    'avg_deaths_by_enemy_champs',
+    'winrate',
     
     # Damage Stats
-    'totalDamageDealtToChampions', 'totalDamageTaken',
-    'magicDamageDealtToChampions', 'physicalDamageDealtToChampions', 'trueDamageDealtToChampions',
-    'damageSelfMitigated', 'damage_per_minute',
-    'largestCriticalStrike', 'challenges_teamDamagePercentage', 'challenges_damageTakenOnTeamPercentage',
+    'avg_dmg_dealt_to_champions', 'avg_dmg_taken',
+    'avg_magic_dmg_to_champs', 'avg_physical_dmg_to_champs', 'avg_true_dmg_to_champs',
+    'avg_dmg_self_mitigated', 'damage_per_minute',
+    'avg_largest_crit', 'avg_pct_damage_in_team', 'avg_dmg_taken_team_pct',
     'pct_highest_dmg_in_match',
     
     # Support/Utility Stats
-    'timeCCingOthers', 'totalHealsOnTeammates', 'totalDamageShieldedOnTeammates',
-    'challenges_effectiveHealAndShielding', 'challenges_enemyChampionImmobilizations',
-    'pct_highest_cc_in_match', 'challenges_saveAllyFromDeath',
+    'avg_time_ccing_champs', 'avg_heals_on_teammate', 'avg_dmg_shielded_on_team',
+    'avg_effective_heal_and_shield', 'avg_champ_immobilizations',
+    'pct_highest_cc_in_match', 'avg_times_save_ally_from_death',
     
     # Economy Stats
-    'goldEarned', 'goldSpent', 'totalMinionsKilled',
-    'neutralMinionsKilled', 'cs_per_minute', 'gold_per_minute',
-    'challenges_laneMinionsFirst10Minutes', 'challenges_jungleCsBefore10Minutes',
-    'challenges_maxCsAdvantageOnLaneOpponent',
+    'avg_gold_earned_per_game', 'avg_gold_spent', 'avg_cs',
+    'avg_neutral_monsters_cs', 'cs_per_minute', 'gold_per_minute',
+    'avg_cs_10_mins', 'avg_jg_cs_before_10m',
+    'avg_max_cs_over_lane_opp',
     
     # Vision Stats
-    'visionScore', 'wardsPlaced', 'wardsKilled', 'visionWardsBoughtInGame',
-    'detectorWardsPlaced', 'challenges_visionScorePerMinute', 'pct_highest_ward_kills_in_match',
-    'challenges_controlWardTimeCoverageInRiverOrEnemyHalf',
+    'avg_vision_score', 'avg_wards_placed', 'avg_wards_killed', 'avg_ctrl_wards_bought',
+    'avg_ctrol_wards_placed', 'avg_vision_score_per_min', 'pct_highest_ward_kills_in_match',
+    'avg_ctrl_ward_time_coverage_in_river_or_enemy_half',
     
     # Objective Stats
-    'team_first_baron_rate', 'team_first_dragon_rate', 'team_first_tower_rate', 'team_first_herald_rate',
-    'damageDealtToBuildings', 'damageDealtToObjectives', 'challenges_turretPlatesTaken',
-    'challenges_epicMonsterSteals', 'challenges_epicMonsterKillsWithin30SecondsOfSpawn',
+    'pct_of_games_team_took_first_baron', 'pct_of_games_team_took_first_drag', 
+    'pct_of_games_team_took_first_turret', 'pct_games_team_took_first_herald',
+    'avg_indiv_dmg_dealt_to_buildings', 'avg_dmg_dealt_to_objs', 'avg_indiv_turret_plates_taken',
+    'avg_epic_monster_steals', 'avg_epic_monster_kills_within_30s_of_spawn',
     
     # Jungle Stats
-    'challenges_buffsStolen', 'challenges_initialBuffCount', 'challenges_initialCrabCount',
-    'challenges_scuttleCrabKills', 'challenges_junglerKillsEarlyJungle',
-    'challenges_killsOnLanersEarlyJungleAsJungler',
+    'avg_buffs_stolen', 'avg_initial_buff_count', 'avg_initial_crab_count',
+    'avg_crabs_per_game', 'avg_jgler_kills_early_jungle',
+    'avg_jgler_early_kills_on_laners',
     
     # Survival Stats
-    'longestTimeSpentLiving', 'bountyLevel', 'totalTimeSpentDead',
-    'challenges_survivedSingleDigitHpCount', 'challenges_survivedThreeImmobilizesInFight',
-    'challenges_tookLargeDamageSurvived',
+    'avg_longest_time_alive', 'avg_bounty_lvl', 'avg_time_spent_dead',
+    'avg_times_survived_single_digit_hp', 'avg_times_survived_3_immobilizes_in_fight',
+    'avg_times_took_large_dmg_survived',
     
     # Early Game Stats
-    'challenges_earlyLaningPhaseGoldExpAdvantage', 'challenges_laningPhaseGoldExpAdvantage',
-    'challenges_maxLevelLeadLaneOpponent', 'first_blood_rate', 'first_tower_kill_rate',
+    'pct_of_games_with_early_lanephase_gold_exp_adv', 'pct_of_games_with_lanephase_gold_exp_adv',
+    'avg_max_lvl_lead_lane_opp', 'pct_games_first_blood_kill', 'pct_of_games_indiv_killed_1st_tower',
     
     # Multikill Stats
-    'killingSprees', 'largestKillingSpree', 'challenges_multikills',
-    'challenges_multiKillOneSpell', 'challenges_legendaryCount'
+    'avg_killing_sprees', 'avg_largest_killing_spee', 'avg_number_of_multikills',
+    'avg_multikills_with_one_spell', 'avg_legendary_count'
 ]
 
-# Check which features exist in the dataframe
-available_features = [f for f in features if f in df.columns]
-missing_features = [f for f in features if f not in df.columns]
-
-if missing_features:
-    print(f"Warning: The following features are not in the dataset and will be skipped: {missing_features}")
-
-# Use only available features
-features = available_features
-
-# Prepare the data
-X = df[features].copy()
-
-# Check for NaN values
-nan_counts = X.isna().sum()
-print("\nColumns with NaN values:")
-print(nan_counts[nan_counts > 0])
-
-# Handle missing values by imputing with mean
-from sklearn.impute import SimpleImputer
-imputer = SimpleImputer(strategy='mean')
-X_imputed = imputer.fit_transform(X)
-
-# Now standardize the imputed data
-X = StandardScaler().fit_transform(X_imputed)
-
-# Elbow method to find optimal number of clusters
-inertias = []
-K = range(1, 20)
-for k in K:
-    kmeans = KMeans(n_clusters=k, random_state=42)
-    kmeans.fit(X)
-    inertias.append(kmeans.inertia_)
-
-# Plot elbow curve
-plt.figure(figsize=(10, 6))
-plt.plot(K, inertias, 'bx-')
-plt.xlabel('k')
-plt.ylabel('Inertia')
-plt.title('Elbow Method For Optimal k')
-plt.show()
-
-# Perform k-means clustering
-n_clusters = 12  # You can adjust this based on the elbow plot
-kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-df['Cluster'] = kmeans.fit_predict(X)
-
-# Analyze PCA components
-pca = PCA()
-X_pca = pca.fit_transform(X)
-
-# Calculate explained variance ratio
-explained_variance_ratio = pca.explained_variance_ratio_
-cumulative_variance_ratio = np.cumsum(explained_variance_ratio)
-
-# Plot explained variance ratio
-plt.figure(figsize=(10, 6))
-plt.plot(range(1, len(explained_variance_ratio) + 1), cumulative_variance_ratio, 'bo-')
-plt.axhline(y=0.80, color='r', linestyle='--', label='80% Threshold')
-plt.xlabel('Number of Components')
-plt.ylabel('Cumulative Explained Variance Ratio')
-plt.title('Explained Variance Ratio by PCA Components')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-# Find number of components needed for 80% variance
-n_components_80 = np.argmax(cumulative_variance_ratio >= 0.80) + 1
-print(f"Number of components needed to explain 80% of variance: {n_components_80}")
-
-# Create visualization using first 3 components (if we have enough dimensions)
-if X_pca.shape[1] >= 3:
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], X_pca[:, 2], 
-                        c=df['Cluster'], cmap='viridis')
-    ax.set_xlabel('First Principal Component')
-    ax.set_ylabel('Second Principal Component')
-    ax.set_zlabel('Third Principal Component')
-    plt.title('Champion Clusters (3D)')
-    
-    # Add champion names as annotations (optional - can be cluttered in 3D)
-    for i, champion in enumerate(df['championName']):
-        ax.text(X_pca[i, 0], X_pca[i, 1], X_pca[i, 2], champion, fontsize=8)
-    
-    plt.colorbar(scatter)
-    plt.show()
-
-
-# Calculate cluster means
-cluster_means = df.groupby('Cluster')[features].mean()
-
-# Print clusters and their characteristics
-for cluster in range(n_clusters):
-    print(f"\n=== Cluster {cluster} ===")
-    print("\nChampions in this cluster:")
-    cluster_champs = df[df['Cluster'] == cluster]['championName'].tolist()
-    print(', '.join(sorted(cluster_champs)))
-    
-    print("\nDistinctive features:")
-    cluster_features = cluster_means.loc[cluster]
-    sorted_features = cluster_features.sort_values(ascending=False)
-    print(sorted_features.head())
-    print("-" * 50)
-
-# %%
-from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
-from sklearn.mixture import GaussianMixture
-from sklearn.metrics import silhouette_score
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Prepare data (using existing X from previous code)
-clustering_methods = {
-    'K-Means': KMeans(n_clusters=5, random_state=42),
-    'DBSCAN': DBSCAN(eps=2.5, min_samples=3),
-    'Hierarchical': AgglomerativeClustering(n_clusters=5),
-    'Gaussian Mixture': GaussianMixture(n_components=5, random_state=42)
+# Define role-specific cluster counts for more detailed archetypes
+ROLE_CLUSTERS = {
+    'TOP': 6,      # Split pushers, Tanks, Bruisers, AP carries, Lane bullies, Utility tanks
+    'JUNGLE': 6,   # Assassins, Power farmers, Gankers, Tank/CC, Objective control, Utility
+    'MIDDLE': 6,   # Assassins, Control mages, Burst mages, Roamers, Artillery mages, Utility mages
+    'BOTTOM': 5,   # Hypercarries, Lane bullies, Utility ADCs, Poke ADCs, Early game ADCs
+    'UTILITY': 6   # Enchanters, Engage tanks, Poke supports, Wardens, Utility mages, Roaming supports
 }
 
-# Compare clustering methods
-plt.figure(figsize=(20, 5))
-for idx, (name, model) in enumerate(clustering_methods.items(), 1):
-    plt.subplot(1, 4, idx)
+def get_distinctive_features(cluster_features, all_clusters_features, n_features=5):
+    """Identify the most distinctive features of a cluster compared to others."""
+    # Calculate z-scores for this cluster's features compared to all clusters
+    cluster_means = all_clusters_features.mean()
+    cluster_stds = all_clusters_features.std()
     
-    # Fit the model
-    if name == 'Gaussian Mixture':
-        labels = model.fit_predict(X)
+    z_scores = {}
+    for feature in cluster_features.index:
+        if cluster_stds[feature] != 0:  # Avoid division by zero
+            z_scores[feature] = (cluster_features[feature] - cluster_means[feature]) / cluster_stds[feature]
+    
+    # Sort features by absolute z-score
+    sorted_features = sorted(z_scores.items(), key=lambda x: abs(x[1]), reverse=True)
+    return sorted_features[:n_features]
+
+def get_cluster_description(role, cluster_features):
+    """Generate a meaningful description of the cluster based on its distinctive features."""
+    description = []
+    
+    # Damage profile
+    if 'avg_magic_dmg_to_champs' in cluster_features and 'avg_physical_dmg_to_champs' in cluster_features:
+        if cluster_features['avg_magic_dmg_to_champs'] > cluster_features['avg_physical_dmg_to_champs']:
+            damage_type = "Magic damage"
+        else:
+            damage_type = "Physical damage"
     else:
-        labels = model.fit_predict(X)
+        damage_type = "Mixed damage"
     
-    # Calculate silhouette score (except for DBSCAN which might have -1 labels)
-    if name != 'DBSCAN':
-        score = silhouette_score(X, labels)
-        print(f"{name} Silhouette Score: {score:.3f}")
+    # Playstyle indicators
+    if ('avg_dmg_taken' in cluster_features and 'avg_dmg_self_mitigated' in cluster_features and
+            cluster_features['avg_dmg_taken'] > 2000 and cluster_features['avg_dmg_self_mitigated'] > 15000):
+        description.append("Tank")
     
-    # Plot first two PCA components colored by cluster
-    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=labels, cmap='viridis')
-    plt.title(f'{name} Clustering')
-    plt.xlabel('First Principal Component')
-    plt.ylabel('Second Principal Component')
+    if 'avg_kills' in cluster_features and cluster_features['avg_kills'] > 7:
+        description.append("High kill potential")
+    
+    if 'avg_assists' in cluster_features and cluster_features['avg_assists'] > 12:
+        description.append("Team-oriented")
+    
+    if 'avg_time_ccing_champs' in cluster_features and cluster_features['avg_time_ccing_champs'] > 25:
+        description.append("CC-heavy")
+    
+    if 'avg_effective_heal_and_shield' in cluster_features and cluster_features['avg_effective_heal_and_shield'] > 5000:
+        description.append("Supportive")
+    
+    if 'cs_per_minute' in cluster_features and cluster_features['cs_per_minute'] > 7:
+        description.append("Farm-focused")
+    
+    if 'avg_vision_score' in cluster_features and cluster_features['avg_vision_score'] > 30:
+        description.append("Vision-focused")
+    
+    if 'pct_games_first_blood_kill' in cluster_features and cluster_features['pct_games_first_blood_kill'] > 20:
+        description.append("Early game aggressor")
+    
+    if 'avg_indiv_dmg_dealt_to_buildings' in cluster_features and cluster_features['avg_indiv_dmg_dealt_to_buildings'] > 2000:
+        description.append("Split push potential")
+    
+    # Role-specific descriptions
+    if role == 'JUNGLE' and 'avg_jgler_early_kills_on_laners' in cluster_features and cluster_features['avg_jgler_early_kills_on_laners'] > 1:
+        description.append("Strong ganker")
+    
+    if role == 'MIDDLE' and 'avg_roam_score' in cluster_features and cluster_features['avg_roam_score'] > 5:
+        description.append("Roaming playstyle")
+    
+    return ", ".join(description) + f" ({damage_type} focused)"
 
-plt.tight_layout()
-plt.show()
+def format_feature_name(feature_name):
+    """Convert feature names to more readable format."""
+    name = feature_name.replace('avg_', '').replace('pct_', '% ').replace('_', ' ')
+    return name.title()
 
-# %%
-# For Hierarchical Clustering, show dendrogram
-from scipy.cluster.hierarchy import dendrogram, linkage
+def cluster_role(role_df, role_name, features):
+    print(f"\n=== Clustering for {role_name} ===")
+    print(f"Number of champions: {len(role_df)}")
+    
+    # Check which features exist in the dataframe
+    available_features = [f for f in features if f in role_df.columns]
+    missing_features = [f for f in features if f not in role_df.columns]
 
-plt.figure(figsize=(15, 10))
-linkage_matrix = linkage(X, 'ward')
-dendrogram(linkage_matrix, labels=df['championName'].values)
-plt.title('Champion Hierarchy Dendrogram')
-plt.xticks(rotation=90)
-plt.show()
+    if missing_features:
+        print(f"Warning: The following features are not in the dataset and will be skipped: {missing_features}")
 
-# For Gaussian Mixture, show probability distribution
-if 'Gaussian Mixture' in clustering_methods:
-    gmm = clustering_methods['Gaussian Mixture']
-    probs = gmm.predict_proba(X)
-    
-    # Show champions with highest mixture of playstyles
-    hybrid_scores = -np.sum(probs * np.log(probs + 1e-10), axis=1)  # entropy
-    most_hybrid = pd.DataFrame({
-        'Champion': df['championName'],
-        'Hybrid Score': hybrid_scores
-    }).sort_values('Hybrid Score', ascending=False)
-    
-    print("\nMost Hybrid Champions (highest mixture of playstyles):")
-    print(most_hybrid.head(10))
+    # Prepare the data
+    X = role_df[available_features].copy()
 
-# %%
-# Create a more detailed cluster profile
-def analyze_cluster_profiles(df, cluster_means, features, n_clusters):
-    # Create a dictionary to store cluster profiles
-    cluster_profiles = {}
+    # Handle missing values by imputing with mean
+    imputer = SimpleImputer(strategy='mean')
+    X_imputed = imputer.fit_transform(X)
+    X = StandardScaler().fit_transform(X_imputed)
+
+    # Use predetermined number of clusters for the role
+    n_clusters = ROLE_CLUSTERS.get(role_name, 5)
     
-    # Calculate global means for comparison
-    global_means = df[features].mean()
+    # Perform k-means clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    role_df['Cluster'] = kmeans.fit_predict(X)
+
+    # Calculate cluster characteristics
+    cluster_means = role_df.groupby('Cluster')[available_features].mean()
     
-    # Calculate standard deviations for normalization
-    global_stds = df[features].std()
-    
+    print(f"\n=== {role_name} Archetypes Analysis ===")
     for cluster in range(n_clusters):
-        # Get champions in this cluster
-        cluster_champs = df[df['Cluster'] == cluster]['championName'].tolist()
+        print(f"\nArchetype {cluster + 1}:")
+        cluster_champs = role_df[role_df['Cluster'] == cluster]['championName'].tolist()
         
-        # Calculate z-scores (how many standard deviations from mean)
-        z_scores = (cluster_means.loc[cluster] - global_means) / global_stds
+        # Get cluster characteristics
+        cluster_features = cluster_means.loc[cluster]
+        description = get_cluster_description(role_name, cluster_features)
         
-        # Get top distinctive features (both high and low)
-        top_high = z_scores.nlargest(10)
-        top_low = z_scores.nsmallest(10)
+        # Get distinctive features
+        distinctive_features = get_distinctive_features(cluster_features, cluster_means)
         
-        # Store in profile dictionary
-        cluster_profiles[cluster] = {
-            'champions': sorted(cluster_champs),
-            'size': len(cluster_champs),
-            'distinctive_high': top_high,
-            'distinctive_low': top_low,
-            'raw_means': cluster_means.loc[cluster]
-        }
+        print(f"Description: {description}")
+        print("Champions:", ', '.join(sorted(cluster_champs)))
         
-        # Print detailed profile
-        print(f"\n=== DETAILED PROFILE: Cluster {cluster} ({len(cluster_champs)} champions) ===")
-        print("\nChampions in this cluster:")
-        print(', '.join(sorted(cluster_champs)))
+        print("\nDistinctive Characteristics:")
+        for feature, z_score in distinctive_features:
+            feature_name = format_feature_name(feature)
+            value = cluster_features[feature]
+            if 'pct' in feature or 'winrate' in feature:
+                print(f"- {feature_name}: {value*100:.1f}% (z-score: {z_score:.2f})")
+            else:
+                print(f"- {feature_name}: {value:.1f} (z-score: {z_score:.2f})")
         
-        print("\nWhat makes this cluster UNIQUE (highest z-scores):")
-        for feature, score in top_high.items():
-            actual_value = cluster_means.loc[cluster, feature]
-            print(f"  {feature}: {actual_value:.2f} (z-score: {score:.2f})")
-        
-        print("\nWhat this cluster LACKS (lowest z-scores):")
-        for feature, score in top_low.items():
-            actual_value = cluster_means.loc[cluster, feature]
-            print(f"  {feature}: {actual_value:.2f} (z-score: {score:.2f})")
-            
-    return cluster_profiles
-
-# Run the detailed analysis
-cluster_profiles = analyze_cluster_profiles(df, cluster_means, features, n_clusters)
-
-# Save the cluster profiles for later use by the chat agent
-import pickle
-with open('champion_cluster_profiles.pkl', 'wb') as f:
-    pickle.dump({
-        'profiles': cluster_profiles,
-        'feature_descriptions': {
-            # Add human-readable descriptions for each feature
-            'kills': 'Average kills per game',
-            'deaths': 'Average deaths per game',
-            'assists': 'Average assists per game',
-            'kda': 'Kill/Death/Assist ratio',
-            # Add more descriptions here
-        },
-        'cluster_summaries': {
-            # After analyzing the data, you can add human-written summaries here
-            # 0: "Tanky frontline champions who excel at absorbing damage and providing crowd control",
-            # 1: "Burst mages with high magical damage output but low survivability",
-            # Add more as you analyze the results
-        }
-    }, f)
-
-
-# %%
-# Add this visualization to better understand what defines each cluster
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-def visualize_cluster_features(cluster_profiles, cluster_to_visualize=None):
-    if cluster_to_visualize is not None:
-        clusters_to_show = [cluster_to_visualize]
-    else:
-        clusters_to_show = list(cluster_profiles.keys())
+        print("\nKey Performance Stats:")
+        if 'winrate' in cluster_features:
+            print(f"Winrate: {cluster_features['winrate']*100:.1f}%")
+        if all(stat in cluster_features for stat in ['avg_kills', 'avg_deaths', 'avg_assists']):
+            print(f"KDA: {cluster_features['avg_kills']:.1f}/{cluster_features['avg_deaths']:.1f}/{cluster_features['avg_assists']:.1f}")
+        if 'damage_per_minute' in cluster_features:
+            print(f"Damage/min: {cluster_features['damage_per_minute']:.0f}")
+        if 'cs_per_minute' in cluster_features:
+            print(f"CS/min: {cluster_features['cs_per_minute']:.1f}")
+        print("-" * 50)
     
-    for cluster in clusters_to_show:
-        profile = cluster_profiles[cluster]
-        
-        # Combine high and low features
-        all_features = pd.concat([profile['distinctive_high'], profile['distinctive_low']])
-        
-        plt.figure(figsize=(12, 8))
-        bars = plt.barh(all_features.index, all_features.values, color=['green' if x > 0 else 'red' for x in all_features.values])
-        plt.axvline(x=0, color='black', linestyle='-', alpha=0.3)
-        plt.title(f'Cluster {cluster} Distinctive Features (Z-scores)')
-        plt.xlabel('Z-score (standard deviations from mean)')
-        plt.tight_layout()
-        plt.show()
+    return role_df, kmeans, None  # Return None for PCA to save memory
 
-# Visualize all clusters or a specific one
-visualize_cluster_features(cluster_profiles)
-# Or for a specific cluster: visualize_cluster_features(cluster_profiles, 0)
+# Get unique roles
+roles = df['mode_team_position'].unique()
 
-# %%
-# Add this to understand relationships between clusters
-from scipy.spatial.distance import pdist, squareform
+# Dictionary to store results for each role
+role_results = {}
 
-# Calculate distances between cluster centers
-cluster_centers = kmeans.cluster_centers_
-cluster_distances = squareform(pdist(cluster_centers))
+# Perform clustering for each role
+for role in roles:
+    role_df = df[df['mode_team_position'] == role].copy()
+    role_results[role] = cluster_role(role_df, role, features)
 
-# Create a DataFrame for better visualization
-cluster_distance_df = pd.DataFrame(
-    cluster_distances, 
-    index=[f'Cluster {i}' for i in range(n_clusters)],
-    columns=[f'Cluster {i}' for i in range(n_clusters)]
-)
+# Save results
+results = {
+    'role_clusters': {role: results[0]['Cluster'].to_dict() for role, results in role_results.items()},
+    'role_models': {role: results[1] for role, results in role_results.items()}
+}
 
-# Visualize as a heatmap
-plt.figure(figsize=(12, 10))
-sns.heatmap(cluster_distance_df, annot=True, cmap='viridis')
-plt.title('Distance Between Cluster Centers')
-plt.tight_layout()
-plt.show()
+with open('clustering/champion_role_clusters.pkl', 'wb') as f:
+    pickle.dump(results, f)
 
-# Find the closest clusters for each cluster
-for i in range(n_clusters):
-    # Get distances to other clusters (excluding self)
-    distances = cluster_distances[i]
-    distances[i] = np.inf  # Exclude self
-    
-    # Find the 3 closest clusters
-    closest_indices = np.argsort(distances)[:3]
-    closest_distances = distances[closest_indices]
-    
-    print(f"\nCluster {i} is most similar to:")
-    for idx, dist in zip(closest_indices, closest_distances):
-        print(f"  Cluster {idx} (distance: {dist:.2f})")
-
-# %%
-# Add this to find similar champions across the dataset
-from sklearn.metrics.pairwise import euclidean_distances
-
-# Calculate distances between all champions
-champion_distances = euclidean_distances(X_imputed)
-
-# Create a DataFrame with champion names
-champion_distance_df = pd.DataFrame(
-    champion_distances,
-    index=df['championName'],
-    columns=df['championName']
-)
-
-# Function to find similar champions
-def find_similar_champions(champion_name, n=5):
-    if champion_name not in champion_distance_df.index:
-        print(f"Champion {champion_name} not found!")
+def find_similar_champions_in_role(champ_name, role, n=5):
+    """Find similar champions within the same role based on playstyle metrics."""
+    role_df = df[df['mode_team_position'] == role]
+    if champ_name not in role_df['championName'].values:
+        print(f"Champion '{champ_name}' not found for role '{role}'")
         return
     
-    # Get distances to all other champions
-    distances = champion_distance_df.loc[champion_name]
+    # Get the features for the target champion
+    target_features = role_df[role_df['championName'] == champ_name][features].iloc[0]
     
-    # Sort and get the closest ones (excluding self)
-    similar_champions = distances.sort_values()[1:n+1]
+    # Calculate distances to all other champions in the same role
+    distances = []
+    for idx, row in role_df.iterrows():
+        if row['championName'] != champ_name:
+            dist = np.linalg.norm(row[features] - target_features)
+            distances.append((row['championName'], dist))
     
-    print(f"Champions most similar to {champion_name}:")
-    for champ, dist in similar_champions.items():
-        print(f"  {champ} (distance: {dist:.2f})")
+    # Sort by distance and get top N
+    similar_champs = sorted(distances, key=lambda x: x[1])[:n]
     
-    return similar_champions
+    # Get the cluster of the target champion
+    target_cluster = role_df[role_df['championName'] == champ_name]['Cluster'].iloc[0]
+    cluster_features = role_df.groupby('Cluster')[features].mean().loc[target_cluster]
+    
+    print(f"\nChampion Analysis: {champ_name} ({role})")
+    print(f"Archetype: {get_cluster_description(role, cluster_features)}")
+    print("\nSimilar champions by playstyle:")
+    for champ, dist in similar_champs:
+        champ_cluster = role_df[role_df['championName'] == champ]['Cluster'].iloc[0]
+        champ_features = role_df.groupby('Cluster')[features].mean().loc[champ_cluster]
+        print(f"{champ}: {get_cluster_description(role, champ_features)}")
 
-# Example usage
-find_similar_champions('Ahri')
-find_similar_champions('Darius')
-
-# %%
-# Add this after analyzing the clusters
-cluster_descriptions = {
-    0: {
-        "name": "Tanky Frontliners",
-        "description": "Champions who excel at absorbing damage and providing crowd control for their team.",
-        "playstyle": "These champions typically build defensive items and focus on initiating fights and protecting allies.",
-        "strengths": ["High survivability", "Good crowd control", "Team fight presence"],
-        "weaknesses": ["Lower damage output", "Can be kited", "Dependent on team follow-up"],
-        "recommended_for": "Players who enjoy being in the middle of fights and protecting their team."
-    },
-    # Add more clusters with detailed descriptions
-}
-
-# Save these descriptions for your chat agent
-with open('champion_cluster_descriptions.pkl', 'wb') as f:
-    pickle.dump(cluster_descriptions, f)
-
-# %%
-def recommend_champions_by_preferences(preferences, cluster_profiles, cluster_descriptions, top_n=5):
-    """
-    Recommend champions based on user preferences.
-    
-    Parameters:
-    - preferences: dict of feature preferences (e.g., {'damage': 'high', 'survivability': 'medium'})
-    - cluster_profiles: the cluster profiles generated earlier
-    - cluster_descriptions: human-readable descriptions of clusters
-    - top_n: number of champions to recommend
-    
-    Returns:
-    - List of recommended champions with explanations
-    """
-    # Map user preferences to features
-    feature_mapping = {
-        'damage': ['totalDamageDealtToChampions', 'damage_per_minute'],
-        'survivability': ['totalDamageTaken', 'damageSelfMitigated', 'longestTimeSpentLiving'],
-        'utility': ['timeCCingOthers', 'totalHealsOnTeammates', 'totalDamageShieldedOnTeammates'],
-        'mobility': ['challenges_quickSoloKills', 'challenges_survivedSingleDigitHpCount'],
-        'farming': ['cs_per_minute', 'gold_per_minute'],
-        # Add more mappings
-    }
-    
-    # Score each cluster based on preferences
-    cluster_scores = {}
-    for cluster_id, profile in cluster_profiles.items():
-        score = 0
-        for pref, value in preferences.items():
-            if pref in feature_mapping:
-                relevant_features = feature_mapping[pref]
-                
-                # Calculate average z-score for relevant features
-                feature_scores = []
-                for feature in relevant_features:
-                    if feature in profile['raw_means']:
-                        # Find this feature's z-score
-                        if feature in profile['distinctive_high'].index:
-                            z_score = profile['distinctive_high'][feature]
-                        elif feature in profile['distinctive_low'].index:
-                            z_score = profile['distinctive_low'][feature]
-                        else:
-                            # If not in distinctive features, it's close to average
-                            z_score = 0
-                        
-                        feature_scores.append(z_score)
-                
-                if feature_scores:
-                    avg_score = sum(feature_scores) / len(feature_scores)
-                    
-                    # Adjust score based on preference value
-                    if value == 'high' and avg_score > 0:
-                        score += avg_score
-                    elif value == 'low' and avg_score < 0:
-                        score += abs(avg_score)
-                    elif value == 'medium' and abs(avg_score) < 0.5:
-                        score += 1 - abs(avg_score)
-        
-        cluster_scores[cluster_id] = score
-    
-    # Get top clusters
-    top_clusters = sorted(cluster_scores.items(), key=lambda x: x[1], reverse=True)[:3]
-    
-    # Get champions from top clusters
-    recommendations = []
-    for cluster_id, score in top_clusters:
-        cluster_champs = cluster_profiles[cluster_id]['champions']
-        
-        # Add explanation from cluster description
-        explanation = cluster_descriptions.get(cluster_id, {}).get('description', 
-                                                                 f"Champions from cluster {cluster_id}")
-        
-        # Add some champions from this cluster
-        champs_to_add = min(top_n // len(top_clusters) + 1, len(cluster_champs))
-        for champ in cluster_champs[:champs_to_add]:
-            recommendations.append({
-                'champion': champ,
-                'cluster': cluster_id,
-                'cluster_score': score,
-                'explanation': explanation
-            })
-    
-    # Return top N recommendations
-    return sorted(recommendations, key=lambda x: x['cluster_score'], reverse=True)[:top_n]
-
-# Example usage
-preferences = {
-    'damage': 'high',
-    'survivability': 'medium',
-    'utility': 'low',
-    'mobility': 'high'
-}
-
-recommendations = recommend_champions_by_preferences(
-    preferences, 
-    cluster_profiles, 
-    cluster_descriptions
-)
-
-for rec in recommendations:
-    print(f"{rec['champion']} - {rec['explanation']}")
-
-# %%
+print("\nClustering analysis complete. Use find_similar_champions_in_role(champ_name, role) to find similar champions.")
 
 
 
