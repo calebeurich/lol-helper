@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Load the data
 def load_data():
     # Load champion stats
-    df = pd.read_csv('../data_processing/champion_stats.csv')
+    df = pd.read_csv('../../data_processing/champion_stats.csv')
     
     # Load cluster data if it exists
     cluster_file = '../clustering/champion_cluster_profiles.pkl'
