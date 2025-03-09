@@ -1,9 +1,11 @@
 import React from 'react';
+import ChampionVisualizations from './components/ChampionVisualizations';
+import './styles.css';
 
 function App() {
   return (
     <div>
-      <h1>LoL Helper</h1>
+      <ChampionVisualizations />
     </div>
   );
 }
