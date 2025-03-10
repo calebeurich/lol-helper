@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -12,7 +12,14 @@ import os
 import logging
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Enable CORS with specific settings
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 logging.basicConfig(level=logging.DEBUG)
 
 # Load the data
@@ -104,31 +111,70 @@ def champion_comparison():
         if df is None:
             return jsonify({"error": "Data not loaded"}), 500
 
+        # Get champion names from query parameters
+        champion1 = request.args.get('champion1', type=str)
+        champion2 = request.args.get('champion2', type=str)
+
+        if not champion1 or not champion2:
+            # If no champions specified, return list of available champions
+            available_champions = sorted(df['championName'].unique().tolist())
+            return jsonify({
+                "message": "Please specify two champions to compare",
+                "available_champions": available_champions
+            })
+
+        # Verify champions exist
+        if champion1 not in df['championName'].values or champion2 not in df['championName'].values:
+            return jsonify({"error": "One or both champions not found"}), 400
+
         # Create a radar chart comparing champions
         features = [
-            'kills', 'deaths', 'assists', 'kda',
-            'totalDamageDealtToChampions', 'totalDamageTaken',
-            'visionScore', 'goldEarned', 'totalMinionsKilled'
+            'avg_kills', 'avg_deaths', 'avg_assists', 'kda',
+            'avg_dmg_dealt_to_champions', 'avg_dmg_taken',
+            'avg_vision_score', 'avg_gold_earned_per_game', 'avg_cs'
         ]
+        
+        # Create more readable labels for the features
+        feature_labels = {
+            'avg_kills': 'Kills',
+            'avg_deaths': 'Deaths',
+            'avg_assists': 'Assists',
+            'kda': 'KDA',
+            'avg_dmg_dealt_to_champions': 'Damage to Champions',
+            'avg_dmg_taken': 'Damage Taken',
+            'avg_vision_score': 'Vision Score',
+            'avg_gold_earned_per_game': 'Gold Earned',
+            'avg_cs': 'CS'
+        }
         
         # Select features that exist in the dataframe
         available_features = [f for f in features if f in df.columns]
         
-        # Normalize the data for the radar chart
-        X = df[available_features].copy()
+        # Get data for selected champions
+        champ1_data = df[df['championName'] == champion1].iloc[0]
+        champ2_data = df[df['championName'] == champion2].iloc[0]
+        
+        # Create array for normalization
+        X = pd.DataFrame([champ1_data[available_features], champ2_data[available_features]])
         X = X.fillna(X.mean())
         X_scaled = StandardScaler().fit_transform(X)
         
-        # Create a sample radar chart for the first two champions
+        # Create radar chart
         fig = go.Figure()
         
-        for i in range(2):
-            fig.add_trace(go.Scatterpolar(
-                r=X_scaled[i],
-                theta=available_features,
-                fill='toself',
-                name=df['championName'].iloc[i]
-            ))
+        fig.add_trace(go.Scatterpolar(
+            r=X_scaled[0],
+            theta=[feature_labels[f] for f in available_features],
+            fill='toself',
+            name=champion1
+        ))
+        
+        fig.add_trace(go.Scatterpolar(
+            r=X_scaled[1],
+            theta=[feature_labels[f] for f in available_features],
+            fill='toself',
+            name=champion2
+        ))
         
         fig.update_layout(
             polar=dict(
@@ -137,7 +183,7 @@ def champion_comparison():
                     range=[-2, 2]
                 )),
             showlegend=True,
-            title='Champion Comparison (Radar Chart)'
+            title=f'Champion Comparison: {champion1} vs {champion2}'
         )
         
         return jsonify(fig.to_dict())
@@ -146,4 +192,4 @@ def champion_comparison():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=True, port=8000) 
