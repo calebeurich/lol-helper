@@ -1,12 +1,7 @@
 from IPython.display import display
 import pandas as pd
-import itertools
-import os
-import requests
 import json
 from dotenv import load_dotenv
-import time
-from tqdm import tqdm
 from items_and_summs_module import tag_finder
 from items_and_summs_module import item_filter
 from items_and_summs_module import get_summ_spell_name
