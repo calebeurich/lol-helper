@@ -1,14 +1,28 @@
 from IPython.display import display
 import pandas as pd
-import os
-import requests
 import json
 from dotenv import load_dotenv
-import time
-from tqdm import tqdm
+from data_processing.items_and_summs_module import tag_finder
+from data_processing.items_and_summs_module import item_filter
+from data_processing.items_and_summs_module import get_summ_spell_name
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
+
+# Open item_dict data
+with open('item_id_tags.json', 'r') as data:
+    items_dict = json.load(data)
+# Function to convert item ids into list of tags
+def item_ids_to_tags(row):
+    return (tag_finder(str(row['item0'])) + tag_finder(str(row['item1'])) + tag_finder(str(row['item2'])) + 
+            tag_finder(str(row['item3'])) + tag_finder(str(row['item4'])) + tag_finder(str(row['item5'])))
+# Function to count total items purchased to derive pct of tags statistic
+def completed_items_count(row):
+    return (item_filter(str(row['item0'])) + item_filter(str(row['item1'])) + item_filter(str(row['item2'])) + 
+            item_filter(str(row['item3'])) + item_filter(str(row['item4'])) + item_filter(str(row['item5'])))
+
+def summ_spells_per_game(row):
+    return [get_summ_spell_name(row['summoner1Id']), get_summ_spell_name(row['summoner2Id'])]
 
 # Function to create a list with all match data
 def create_match_df(dataframe_csv: str) -> list[dict]:
@@ -59,7 +73,12 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
         lambda x: 1 if pd.notnull(x) and 660 < x <= 900 else 0)
     df_participants['sum_first_drag_tkd_min_15+'] = df_participants['challenges_earliestDragonTakedown'].apply(
         lambda x: 1 if pd.notnull(x) and x > 900 else 0)
-    # Ensure that junglerkillsEarlyJungle only returns values when jungler did play position (key value pair only appear for junglers)
+    # Item tags column
+    df_participants['item_tags'] = df_participants.apply(item_ids_to_tags, axis=1)
+    df_participants['completed_items'] = df_participants.apply(completed_items_count, axis=1)
+    # Summoner spell columns
+    df_participants['summspells_per_game'] = df_participants.apply(summ_spells_per_game, axis=1)
+    # Ensure that junglerkllsEarlyJungle only returns values when jungler did play position (key value pair only appear for junglers)
     # Make sure to check if this performs well
     check_if_jungler = (
         (df_participants['teamPosition'] == 'JUNGLE') & 
@@ -182,6 +201,9 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
         avg_takedowns_before_jg_camps_spawn = ('challenges_takedownsBeforeJungleMinionSpawn', 'mean'),
         avg_first_takedown_time = ('challenges_takedownsFirstXMinutes', 'mean'), # Minute of first takedown
 
+        # Summoner spells
+        summspells_per_game = ('item_tags', 'sum'),
+
         # Experience stats
         avg_champ_exp_at_game_end = ('champExperience', 'mean'),
         avg_champ_lvl_at_game_end = ('champLevel', 'mean'), 
@@ -204,6 +226,10 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
         avg_consumables_purchased = ('consumablesPurchased', 'mean'),
         avg_number_of_items_purchased = ('itemsPurchased', 'mean'), # int of number of items purchased in game, might be useless as it seems to count items and components as well
         total_games_fastest_item_completion = ('challenges_fastestLegendary', 'sum'), # Counts how many games the champion was first to acquire an item
+
+        # Item tags
+        item_tags = ('item_tags', 'sum'),
+        completed_items = ('completed_items', 'sum'),
         
         # Jungle related stats
             # Jungle farm
@@ -368,10 +394,6 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
     ).round(2)
     
     # Calculate derived stats
-
-    # Add champ_role column that combines championName and teamPosition
-    champion_stats['champ_role'] = champion_stats.index.map(lambda x: f"{x[1]} {x[2]}")
-
     champion_stats['kda'] = ((champion_stats['avg_kills'] + champion_stats['avg_assists']) / 
                             champion_stats['avg_deaths']).round(2)
     champion_stats['winrate'] = ((champion_stats['total_wins'] ) / 
@@ -450,8 +472,62 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
                                                    champion_stats['total_games_played_in_role']) * 100).round(2)
     champion_stats['pct_of_games_played_champ_select_position'] = (((champion_stats['total_games_played_champ_select_position']) / 
                                                    champion_stats['total_games_played_in_role']) * 100).round(2)
-    
-    
+    # Item tags stats
+    champion_stats['pct_items_abilityhaste_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('AbilityHaste')) / 
+                                                    champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_spellblock_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('SpellBlock')) / 
+                                                  champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_armor_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
+                                             champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_criticalstrike_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('CriticalStrike')) / 
+                                                      champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_lifesteal_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('LifeSteal')) / 
+                                                 champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_nonbootsmovement_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
+                                                        champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_tenacity_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Tenacity')) / 
+                                                champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_armorpenetration_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('ArmorPenetration')) / 
+                                                        champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_healthregen_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
+                                                   champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_aura_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Aura')) / 
+                                            champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_attackspeed_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('AttackSpeed')) / 
+                                                   champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_goldper_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('GoldPer')) / 
+                                               champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_vision_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Vision')) / 
+                                              champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_jungle_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Jungle')) / 
+                                              champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_armor_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
+                                             champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_healthregen_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
+                                                   champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_active_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Active')) / 
+                                              champion_stats['completed_items'] * 100).round(2)
+    champion_stats['pct_items_nonbootsmovement_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
+                                                        champion_stats['completed_items'] * 100).round(2)
+    # Summoner spell stats
+    champion_stats['pct_games_w_barrier'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('barrier')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_cleanse'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('cleanse')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_exhaust'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('exhaust')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_flash'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('flash')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_ghost'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ghost')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_heal'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('heal')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_ignite'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ignite')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_smite'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('smite')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
+    champion_stats['pct_games_w_teleport'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('teleport')) / 
+                                              champion_stats['total_games_played_in_role'] * 100).round(2)
     
 
     champion_stats = champion_stats.drop([
