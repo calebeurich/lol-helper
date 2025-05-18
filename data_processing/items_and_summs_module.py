@@ -1,6 +1,6 @@
 import json
 import pandas as pd
-import data_processing.items_nd_sums as items_nd_sums
+import items_nd_sums
 
 #  Open JSON file with item data
 with open('items_info.json', 'r') as data:

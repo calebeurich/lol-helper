@@ -2,9 +2,9 @@ from IPython.display import display
 import pandas as pd
 import json
 from dotenv import load_dotenv
-from data_processing.items_and_summs_module import tag_finder
-from data_processing.items_and_summs_module import item_filter
-from data_processing.items_and_summs_module import get_summ_spell_name
+from items_and_summs_module import tag_finder
+from items_and_summs_module import item_filter
+from items_and_summs_module import get_summ_spell_name
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -545,12 +545,13 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
     ], axis = 1)
 
 
-    return champion_stats
+    return champion_stats, filtered_df
 
 # Create and display the aggregated data
-champion_stats = aggregate_champion_data(df_participants, df_teams)
+champion_stats, filtered_df = aggregate_champion_data(df_participants, df_teams)
 # display(champion_stats.sort_values('challenges_earliestDragonTakedown', ascending=False))
 champion_stats.to_csv("champion_stats.csv", index = True)
+filtered_df.to_csv("filtered_df.csv", index = True)
 total_games = champion_stats['total_games_played_in_role'].sum()
 
 
