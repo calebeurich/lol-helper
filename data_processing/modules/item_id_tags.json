@@ -1,0 +1,2860 @@
+{
+    "1035": [
+        "life_steal",
+        "spell_vamp",
+        "jungle"
+    ],
+    "1039": [
+        "life_steal",
+        "spell_vamp",
+        "jungle"
+    ],
+    "1040": [
+        "life_steal",
+        "spell_vamp",
+        "jungle"
+    ],
+    "1054": [
+        "health",
+        "health_regen",
+        "lane"
+    ],
+    "1055": [
+        "health",
+        "damage",
+        "spell_vamp",
+        "lane"
+    ],
+    "1056": [
+        "health",
+        "lane",
+        "mana_regen",
+        "spell_damage"
+    ],
+    "1083": [
+        "damage",
+        "on_hit",
+        "lane"
+    ],
+    "1101": [
+        "jungle"
+    ],
+    "1102": [
+        "jungle"
+    ],
+    "1103": [
+        "jungle"
+    ],
+    "1104": [
+        "trinket",
+        "active"
+    ],
+    "1105": [
+        "jungle"
+    ],
+    "1106": [
+        "jungle"
+    ],
+    "1107": [
+        "jungle"
+    ],
+    "126697": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "1500": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1501": [],
+    "1502": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1503": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1504": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1506": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1507": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1508": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1509": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1510": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1511": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1512": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1515": [
+        "armor"
+    ],
+    "1516": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1517": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1518": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1519": [
+        "health_regen",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1520": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "1521": [
+        "on_hit"
+    ],
+    "1522": [
+        "armor",
+        "damage"
+    ],
+    "1523": [
+        "armor",
+        "mana_regen",
+        "on_hit"
+    ],
+    "2003": [
+        "health_regen",
+        "consumable",
+        "lane",
+        "jungle"
+    ],
+    "2010": [],
+    "2033": [
+        "active",
+        "consumable",
+        "health_regen",
+        "lane",
+        "mana_regen"
+    ],
+    "2049": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "lane",
+        "ability_haste"
+    ],
+    "2050": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "lane",
+        "ability_haste"
+    ],
+    "2051": [
+        "health",
+        "health_regen",
+        "lane"
+    ],
+    "2052": [],
+    "2055": [
+        "consumable",
+        "lane",
+        "stealth",
+        "vision"
+    ],
+    "2056": [
+        "consumable",
+        "lane",
+        "stealth",
+        "vision"
+    ],
+    "2065": [
+        "spell_damage",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "2138": [
+        "health",
+        "consumable",
+        "nonboots_movement",
+        "tenacity"
+    ],
+    "2139": [
+        "consumable",
+        "mana_regen",
+        "spell_damage"
+    ],
+    "2140": [
+        "consumable",
+        "damage",
+        "life_steal",
+        "spell_vamp"
+    ],
+    "2141": [
+        "damage",
+        "consumable"
+    ],
+    "2142": [
+        "spell_damage",
+        "consumable"
+    ],
+    "2143": [
+        "health",
+        "consumable"
+    ],
+    "2144": [
+        "consumable",
+        "cooldown_reduction"
+    ],
+    "2145": [
+        "consumable"
+    ],
+    "2150": [
+        "consumable"
+    ],
+    "2151": [
+        "health",
+        "consumable",
+        "tenacity"
+    ],
+    "2152": [
+        "consumable",
+        "tenacity"
+    ],
+    "220000": [
+        "health",
+        "spell_block",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "spell_damage",
+        "mana",
+        "consumable",
+        "cooldown_reduction",
+        "spell_vamp",
+        "nonboots_movement",
+        "tenacity",
+        "magic_penetration",
+        "armor_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "220001": [
+        "health",
+        "spell_block",
+        "armor",
+        "damage",
+        "attack_speed",
+        "life_steal",
+        "mana",
+        "consumable",
+        "cooldown_reduction",
+        "spell_vamp",
+        "on_hit",
+        "nonboots_movement",
+        "tenacity",
+        "armor_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "220002": [
+        "health",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "life_steal",
+        "mana",
+        "consumable",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "220003": [
+        "health",
+        "spell_block",
+        "armor",
+        "damage",
+        "attack_speed",
+        "consumable",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "220004": [
+        "health",
+        "spell_block",
+        "armor",
+        "critical_strike",
+        "attack_speed",
+        "spell_damage",
+        "mana",
+        "consumable",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "spell_vamp",
+        "on_hit",
+        "nonboots_movement",
+        "magic_penetration",
+        "armor_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "220005": [
+        "health",
+        "spell_block",
+        "armor",
+        "critical_strike",
+        "spell_damage",
+        "consumable",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "nonboots_movement",
+        "magic_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "220006": [
+        "health",
+        "spell_block",
+        "armor",
+        "attack_speed",
+        "spell_damage",
+        "mana_regen",
+        "consumable",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "on_hit",
+        "nonboots_movement",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "220007": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "life_steal",
+        "spell_damage",
+        "mana",
+        "mana_regen",
+        "consumable",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "spell_vamp",
+        "on_hit",
+        "nonboots_movement",
+        "tenacity",
+        "magic_penetration",
+        "armor_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "221011": [
+        "health"
+    ],
+    "221026": [
+        "spell_damage"
+    ],
+    "221031": [
+        "armor"
+    ],
+    "221038": [
+        "damage"
+    ],
+    "221043": [
+        "attack_speed",
+        "on_hit"
+    ],
+    "221053": [
+        "damage",
+        "life_steal"
+    ],
+    "221057": [
+        "spell_block"
+    ],
+    "221058": [
+        "spell_damage"
+    ],
+    "222022": [
+        "cooldown_reduction"
+    ],
+    "222051": [
+        "health",
+        "health_regen",
+        "lane"
+    ],
+    "222065": [
+        "spell_damage",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "222141": [
+        "damage",
+        "consumable"
+    ],
+    "222502": [
+        "health",
+        "armor",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "222503": [
+        "spell_damage",
+        "mana",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "222504": [
+        "health",
+        "spell_block",
+        "health_regen"
+    ],
+    "223001": [
+        "health",
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "223002": [
+        "health",
+        "armor",
+        "nonboots_movement"
+    ],
+    "223003": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "223004": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "223005": [
+        "boots"
+    ],
+    "223006": [
+        "attack_speed",
+        "boots"
+    ],
+    "223009": [
+        "boots"
+    ],
+    "223011": [
+        "spell_damage",
+        "mana_regen",
+        "ability_haste"
+    ],
+    "223020": [
+        "boots",
+        "magic_penetration"
+    ],
+    "223026": [
+        "armor",
+        "damage"
+    ],
+    "223031": [
+        "critical_strike",
+        "damage"
+    ],
+    "223032": [
+        "damage",
+        "critical_strike"
+    ],
+    "223033": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "223036": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "223039": [
+        "health",
+        "critical_strike",
+        "lane"
+    ],
+    "223040": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "223042": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "armor_penetration"
+    ],
+    "223046": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "223047": [
+        "armor",
+        "boots"
+    ],
+    "223050": [
+        "health",
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "223053": [
+        "health",
+        "damage",
+        "tenacity"
+    ],
+    "223057": [
+        "on_hit",
+        "ability_haste"
+    ],
+    "223065": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223067": [
+        "health",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223068": [
+        "health",
+        "armor",
+        "aura",
+        "ability_haste"
+    ],
+    "223071": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "223072": [
+        "damage",
+        "life_steal"
+    ],
+    "223073": [
+        "health",
+        "damage",
+        "attack_speed",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "223074": [
+        "damage",
+        "life_steal",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "223075": [
+        "health",
+        "armor"
+    ],
+    "223078": [
+        "health",
+        "damage",
+        "attack_speed",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "223084": [
+        "health",
+        "health_regen"
+    ],
+    "223085": [
+        "critical_strike",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "223087": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "223089": [
+        "spell_damage"
+    ],
+    "223091": [
+        "spell_block",
+        "attack_speed",
+        "on_hit",
+        "tenacity"
+    ],
+    "223094": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "223095": [
+        "damage",
+        "critical_strike"
+    ],
+    "223100": [
+        "spell_damage",
+        "on_hit",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "223102": [
+        "spell_block",
+        "spell_damage"
+    ],
+    "223105": [
+        "spell_block",
+        "armor",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223107": [
+        "health",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223109": [
+        "health",
+        "health_regen",
+        "armor",
+        "aura",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223110": [
+        "armor",
+        "mana",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223111": [
+        "boots",
+        "spell_block",
+        "tenacity"
+    ],
+    "223112": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "lane"
+    ],
+    "223115": [
+        "attack_speed",
+        "spell_damage",
+        "on_hit",
+        "ability_haste"
+    ],
+    "223116": [
+        "health",
+        "spell_damage",
+        "slow"
+    ],
+    "223118": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "223119": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "223121": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "223124": [
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "on_hit"
+    ],
+    "223135": [
+        "magic_penetration",
+        "spell_damage"
+    ],
+    "223137": [
+        "spell_damage",
+        "magic_penetration",
+        "ability_haste"
+    ],
+    "223139": [
+        "spell_block",
+        "damage",
+        "life_steal",
+        "active",
+        "nonboots_movement",
+        "tenacity"
+    ],
+    "223142": [
+        "damage",
+        "active",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "223143": [
+        "health",
+        "armor",
+        "active",
+        "slow"
+    ],
+    "223146": [
+        "damage",
+        "life_steal",
+        "spell_damage",
+        "active",
+        "spell_vamp"
+    ],
+    "223152": [
+        "health",
+        "spell_damage",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "223153": [
+        "damage",
+        "attack_speed",
+        "life_steal",
+        "slow",
+        "on_hit"
+    ],
+    "223156": [
+        "spell_block",
+        "damage",
+        "life_steal",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "223157": [
+        "armor",
+        "spell_damage",
+        "active"
+    ],
+    "223158": [
+        "boots",
+        "cooldown_reduction"
+    ],
+    "223161": [
+        "health",
+        "damage",
+        "ability_haste"
+    ],
+    "223165": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223172": [
+        "attack_speed",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "tenacity"
+    ],
+    "223177": [
+        "health",
+        "damage",
+        "lane",
+        "ability_haste"
+    ],
+    "223181": [
+        "health",
+        "damage",
+        "nonboots_movement"
+    ],
+    "223184": [
+        "health",
+        "damage",
+        "life_steal",
+        "lane"
+    ],
+    "223185": [
+        "damage",
+        "armor_penetration",
+        "lane"
+    ],
+    "223190": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "active",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "223193": [
+        "spell_block",
+        "armor",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "223222": [
+        "health",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "tenacity",
+        "ability_haste"
+    ],
+    "223302": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "magic_penetration",
+        "armor_penetration"
+    ],
+    "223504": [
+        "attack_speed",
+        "spell_damage",
+        "mana_regen",
+        "nonboots_movement"
+    ],
+    "223508": [
+        "damage",
+        "critical_strike",
+        "mana_regen",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "223742": [
+        "health",
+        "armor",
+        "slow",
+        "nonboots_movement"
+    ],
+    "223748": [
+        "health",
+        "health_regen",
+        "damage",
+        "on_hit"
+    ],
+    "223814": [
+        "health",
+        "damage",
+        "armor_penetration"
+    ],
+    "224004": [
+        "damage",
+        "armor_penetration"
+    ],
+    "224005": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "224401": [
+        "health",
+        "spell_block",
+        "nonboots_movement"
+    ],
+    "224403": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "life_steal",
+        "spell_damage",
+        "mana",
+        "mana_regen",
+        "cooldown_reduction",
+        "nonboots_movement"
+    ],
+    "224628": [
+        "spell_damage",
+        "ability_haste"
+    ],
+    "224629": [
+        "health",
+        "spell_damage",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "224633": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "spell_vamp"
+    ],
+    "224636": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "224637": [
+        "health",
+        "spell_damage"
+    ],
+    "224644": [
+        "health",
+        "spell_damage",
+        "mana",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "224645": [
+        "spell_damage",
+        "magic_penetration"
+    ],
+    "224646": [
+        "spell_damage",
+        "gold_per",
+        "nonboots_movement",
+        "magic_penetration"
+    ],
+    "226035": [
+        "health",
+        "spell_block",
+        "damage",
+        "active",
+        "tenacity"
+    ],
+    "226333": [
+        "armor",
+        "damage",
+        "ability_haste"
+    ],
+    "226609": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226610": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226616": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226617": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226620": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226621": [
+        "spell_damage",
+        "mana_regen"
+    ],
+    "226630": [
+        "health",
+        "damage",
+        "life_steal",
+        "active",
+        "cooldown_reduction",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "226631": [
+        "health",
+        "damage",
+        "attack_speed",
+        "slow",
+        "nonboots_movement"
+    ],
+    "226632": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "magic_penetration",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226653": [
+        "health",
+        "spell_damage"
+    ],
+    "226655": [
+        "spell_damage",
+        "mana",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226656": [
+        "health",
+        "spell_damage",
+        "mana",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "ability_haste"
+    ],
+    "226657": [
+        "health",
+        "health_regen",
+        "spell_damage",
+        "mana",
+        "mana_regen"
+    ],
+    "226662": [
+        "health",
+        "armor",
+        "cooldown_reduction",
+        "slow",
+        "on_hit",
+        "ability_haste"
+    ],
+    "226664": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "aura",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "226665": [
+        "health",
+        "spell_block",
+        "armor",
+        "magic_resist"
+    ],
+    "226667": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226671": [
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "active",
+        "nonboots_movement"
+    ],
+    "226672": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "226673": [
+        "damage",
+        "critical_strike"
+    ],
+    "226675": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "226676": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "226691": [
+        "damage",
+        "stealth",
+        "cooldown_reduction",
+        "slow",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226692": [
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "226693": [
+        "damage",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226694": [
+        "damage",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226695": [
+        "damage",
+        "armor_penetration"
+    ],
+    "226696": [
+        "damage",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226697": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226698": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226699": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "226701": [
+        "damage",
+        "active",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "228001": [
+        "health",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "228002": [
+        "armor",
+        "spell_damage",
+        "active"
+    ],
+    "228003": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "228004": [
+        "health",
+        "spell_block",
+        "armor",
+        "magic_resist"
+    ],
+    "228005": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "228006": [
+        "damage",
+        "life_steal",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "228008": [
+        "health",
+        "damage",
+        "attack_speed",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "228020": [
+        "health",
+        "spell_block",
+        "cooldown_reduction",
+        "magic_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "2403": [],
+    "2501": [
+        "health",
+        "damage"
+    ],
+    "2502": [
+        "health",
+        "spell_block",
+        "armor",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "2503": [
+        "spell_damage",
+        "mana",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "2504": [
+        "health",
+        "spell_block",
+        "health_regen"
+    ],
+    "3001": [
+        "health",
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "3002": [
+        "health",
+        "armor",
+        "nonboots_movement"
+    ],
+    "3003": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "3004": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "3005": [
+        "boots"
+    ],
+    "3011": [
+        "spell_damage",
+        "mana_regen",
+        "ability_haste"
+    ],
+    "3012": [
+        "health",
+        "mana_regen"
+    ],
+    "3026": [
+        "armor",
+        "damage"
+    ],
+    "3031": [
+        "critical_strike",
+        "damage"
+    ],
+    "3032": [
+        "damage",
+        "critical_strike",
+        "attack_speed"
+    ],
+    "3033": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "3036": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "3039": [
+        "spell_block",
+        "armor",
+        "damage",
+        "lane"
+    ],
+    "3040": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "3041": [
+        "health",
+        "spell_damage",
+        "nonboots_movement"
+    ],
+    "3042": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "armor_penetration"
+    ],
+    "3046": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "3050": [
+        "health",
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "3053": [
+        "health",
+        "damage",
+        "tenacity"
+    ],
+    "3065": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "3068": [
+        "health",
+        "armor",
+        "aura",
+        "ability_haste"
+    ],
+    "3071": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "3072": [
+        "damage",
+        "life_steal"
+    ],
+    "3073": [
+        "health",
+        "damage",
+        "attack_speed",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "3074": [
+        "damage",
+        "life_steal",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "3075": [
+        "health",
+        "armor"
+    ],
+    "3078": [
+        "health",
+        "damage",
+        "attack_speed",
+        "cooldown_reduction",
+        "on_hit",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "3083": [
+        "health",
+        "health_regen"
+    ],
+    "3084": [
+        "health",
+        "health_regen"
+    ],
+    "3085": [
+        "critical_strike",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "3087": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "3089": [
+        "spell_damage"
+    ],
+    "3091": [
+        "spell_block",
+        "attack_speed",
+        "on_hit",
+        "tenacity"
+    ],
+    "3094": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "3095": [
+        "damage",
+        "critical_strike"
+    ],
+    "3100": [
+        "spell_damage",
+        "on_hit",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "3102": [
+        "spell_block",
+        "spell_damage"
+    ],
+    "3107": [
+        "health",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "3109": [
+        "health",
+        "health_regen",
+        "armor",
+        "aura",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "3110": [
+        "armor",
+        "mana",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "3112": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "lane"
+    ],
+    "3115": [
+        "attack_speed",
+        "spell_damage",
+        "on_hit",
+        "ability_haste"
+    ],
+    "3116": [
+        "health",
+        "spell_damage",
+        "slow"
+    ],
+    "3117": [
+        "boots"
+    ],
+    "3118": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "3119": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "3121": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "3124": [
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "on_hit"
+    ],
+    "3128": [
+        "spell_damage",
+        "cooldown_reduction"
+    ],
+    "3131": [
+        "damage",
+        "critical_strike",
+        "attack_speed"
+    ],
+    "3135": [
+        "magic_penetration",
+        "spell_damage"
+    ],
+    "3137": [
+        "spell_damage",
+        "magic_penetration",
+        "ability_haste"
+    ],
+    "3139": [
+        "spell_block",
+        "damage",
+        "life_steal",
+        "active",
+        "nonboots_movement",
+        "tenacity"
+    ],
+    "3142": [
+        "damage",
+        "active",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "3143": [
+        "health",
+        "armor",
+        "active",
+        "slow"
+    ],
+    "3146": [
+        "damage",
+        "life_steal",
+        "spell_damage",
+        "active",
+        "spell_vamp"
+    ],
+    "3152": [
+        "health",
+        "spell_damage",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "3153": [
+        "damage",
+        "attack_speed",
+        "life_steal",
+        "slow",
+        "on_hit"
+    ],
+    "3156": [
+        "spell_block",
+        "damage",
+        "life_steal",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "3157": [
+        "armor",
+        "spell_damage",
+        "active"
+    ],
+    "3161": [
+        "health",
+        "damage",
+        "ability_haste"
+    ],
+    "3165": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "3170": [
+        "boots"
+    ],
+    "3171": [
+        "cooldown_reduction",
+        "boots"
+    ],
+    "3172": [
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "3173": [
+        "spell_block",
+        "boots",
+        "tenacity",
+        "magic_resist"
+    ],
+    "3174": [
+        "armor",
+        "boots"
+    ],
+    "3175": [
+        "boots",
+        "magic_penetration"
+    ],
+    "3176": [
+        "boots"
+    ],
+    "3177": [
+        "health",
+        "damage",
+        "lane",
+        "ability_haste"
+    ],
+    "3179": [
+        "damage",
+        "vision",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "3181": [
+        "health",
+        "damage",
+        "nonboots_movement"
+    ],
+    "3184": [
+        "health",
+        "damage",
+        "life_steal",
+        "lane"
+    ],
+    "3190": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "active",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "3193": [
+        "spell_block",
+        "armor",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "322065": [
+        "spell_damage",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "3222": [
+        "health",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "tenacity",
+        "ability_haste"
+    ],
+    "323002": [
+        "health",
+        "armor",
+        "nonboots_movement"
+    ],
+    "323003": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "323004": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "323040": [
+        "spell_damage",
+        "mana",
+        "ability_haste"
+    ],
+    "323042": [
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "on_hit",
+        "armor_penetration"
+    ],
+    "323050": [
+        "health",
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "323075": [
+        "health",
+        "armor"
+    ],
+    "323107": [
+        "health",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "323109": [
+        "health",
+        "health_regen",
+        "armor",
+        "aura",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "323110": [
+        "armor",
+        "mana",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "323119": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "323121": [
+        "health",
+        "mana",
+        "ability_haste"
+    ],
+    "323190": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "active",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "323222": [
+        "health",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "tenacity",
+        "ability_haste"
+    ],
+    "323504": [
+        "attack_speed",
+        "spell_damage",
+        "mana_regen",
+        "nonboots_movement"
+    ],
+    "324005": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "326616": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "326617": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "326620": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "326621": [
+        "spell_damage",
+        "mana_regen"
+    ],
+    "326657": [
+        "health",
+        "health_regen",
+        "spell_damage",
+        "mana",
+        "mana_regen"
+    ],
+    "328020": [
+        "health",
+        "spell_block",
+        "spell_damage",
+        "cooldown_reduction",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "3302": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "magic_penetration",
+        "armor_penetration"
+    ],
+    "3330": [
+        "active",
+        "jungle",
+        "lane",
+        "trinket",
+        "vision"
+    ],
+    "3340": [
+        "active",
+        "jungle",
+        "lane",
+        "trinket",
+        "vision"
+    ],
+    "3348": [
+        "active",
+        "jungle",
+        "lane",
+        "trinket",
+        "vision"
+    ],
+    "3349": [
+        "active",
+        "jungle",
+        "lane",
+        "trinket",
+        "vision"
+    ],
+    "3363": [
+        "active",
+        "trinket",
+        "vision"
+    ],
+    "3364": [
+        "active",
+        "trinket",
+        "vision"
+    ],
+    "3400": [
+        "consumable",
+        "gold_per"
+    ],
+    "3430": [
+        "critical_strike",
+        "spell_damage",
+        "cooldown_reduction"
+    ],
+    "3504": [
+        "attack_speed",
+        "spell_damage",
+        "mana_regen",
+        "nonboots_movement"
+    ],
+    "3508": [
+        "damage",
+        "critical_strike",
+        "mana_regen",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "3513": [
+        "trinket",
+        "active"
+    ],
+    "3599": [
+        "consumable"
+    ],
+    "3600": [
+        "consumable"
+    ],
+    "3742": [
+        "health",
+        "armor",
+        "slow",
+        "nonboots_movement"
+    ],
+    "3748": [
+        "health",
+        "health_regen",
+        "damage",
+        "on_hit"
+    ],
+    "3814": [
+        "health",
+        "damage",
+        "armor_penetration"
+    ],
+    "3850": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3851": [
+        "gold_per",
+        "lane",
+        "mana_regen",
+        "spell_damage"
+    ],
+    "3853": [
+        "gold_per",
+        "lane",
+        "mana_regen",
+        "spell_damage"
+    ],
+    "3854": [
+        "health",
+        "health_regen",
+        "damage",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3855": [
+        "health",
+        "health_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3857": [
+        "health",
+        "health_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3858": [
+        "health",
+        "health_regen",
+        "spell_damage",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3859": [
+        "health",
+        "health_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3860": [
+        "health",
+        "health_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3862": [
+        "health",
+        "damage",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3863": [
+        "health",
+        "mana_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3864": [
+        "health",
+        "mana_regen",
+        "gold_per",
+        "lane"
+    ],
+    "3865": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3866": [
+        "spell_damage",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3869": [
+        "health",
+        "health_regen",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3870": [
+        "health",
+        "health_regen",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3871": [
+        "health",
+        "health_regen",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3876": [
+        "health",
+        "health_regen",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3877": [
+        "health",
+        "health_regen",
+        "mana_regen",
+        "vision",
+        "gold_per",
+        "lane"
+    ],
+    "3901": [],
+    "3902": [],
+    "3903": [],
+    "4004": [
+        "damage",
+        "armor_penetration"
+    ],
+    "4005": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "4010": [
+        "spell_block",
+        "armor",
+        "spell_damage",
+        "cooldown_reduction"
+    ],
+    "4011": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "on_hit",
+        "ability_haste"
+    ],
+    "4012": [
+        "health",
+        "spell_block",
+        "armor",
+        "tenacity"
+    ],
+    "4013": [
+        "spell_block",
+        "armor",
+        "spell_damage",
+        "tenacity"
+    ],
+    "4014": [
+        "health",
+        "damage",
+        "attack_speed",
+        "slow"
+    ],
+    "4015": [
+        "spell_damage",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "magic_penetration",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "4016": [
+        "spell_damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "4017": [
+        "damage",
+        "life_steal",
+        "spell_vamp",
+        "on_hit",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "4401": [
+        "health",
+        "spell_block",
+        "nonboots_movement"
+    ],
+    "4402": [
+        "health",
+        "damage",
+        "mana",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "4403": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "life_steal",
+        "spell_damage",
+        "mana",
+        "mana_regen",
+        "cooldown_reduction",
+        "nonboots_movement"
+    ],
+    "443054": [
+        "armor",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "443055": [
+        "damage",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "443056": [
+        "health",
+        "armor",
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "443058": [
+        "health",
+        "armor"
+    ],
+    "443059": [
+        "health",
+        "magic_resist"
+    ],
+    "443060": [
+        "damage",
+        "critical_strike",
+        "spell_damage"
+    ],
+    "443061": [
+        "health",
+        "spell_block",
+        "armor",
+        "critical_strike",
+        "magic_resist"
+    ],
+    "443062": [
+        "spell_damage",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "443063": [
+        "spell_block",
+        "armor",
+        "ability_haste"
+    ],
+    "443064": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "armor",
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "life_steal",
+        "spell_damage",
+        "mana",
+        "mana_regen",
+        "active",
+        "cooldown_reduction",
+        "spell_vamp",
+        "nonboots_movement",
+        "magic_penetration",
+        "armor_penetration",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "443069": [
+        "damage",
+        "critical_strike",
+        "attack_speed"
+    ],
+    "443079": [
+        "health",
+        "active",
+        "nonboots_movement"
+    ],
+    "443080": [
+        "health",
+        "armor",
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "443081": [
+        "health",
+        "attack_speed"
+    ],
+    "443090": [
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "nonboots_movement"
+    ],
+    "443193": [
+        "spell_block",
+        "armor",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "444636": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "444637": [
+        "health",
+        "spell_damage",
+        "active",
+        "ability_haste"
+    ],
+    "444644": [
+        "health",
+        "spell_damage",
+        "mana",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "446632": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "magic_penetration",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "446656": [
+        "health",
+        "spell_damage",
+        "mana",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "ability_haste"
+    ],
+    "446667": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "446671": [
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "active",
+        "nonboots_movement"
+    ],
+    "446691": [
+        "damage",
+        "stealth",
+        "cooldown_reduction",
+        "slow",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "446693": [
+        "damage",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "447100": [
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "447101": [
+        "attack_speed",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "447102": [
+        "health",
+        "attack_speed",
+        "spell_damage"
+    ],
+    "447103": [
+        "damage",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "447104": [
+        "health",
+        "spell_damage",
+        "ability_haste"
+    ],
+    "447105": [
+        "spell_damage",
+        "mana_regen",
+        "ability_haste"
+    ],
+    "447106": [
+        "health",
+        "health_regen",
+        "armor",
+        "damage",
+        "attack_speed",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "447107": [
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "nonboots_movement"
+    ],
+    "447108": [
+        "spell_damage",
+        "nonboots_movement"
+    ],
+    "447109": [
+        "armor",
+        "spell_damage",
+        "magic_resist"
+    ],
+    "447110": [
+        "health",
+        "spell_damage",
+        "tenacity"
+    ],
+    "447111": [
+        "health",
+        "damage"
+    ],
+    "447112": [
+        "damage",
+        "spell_damage",
+        "magic_penetration",
+        "armor_penetration"
+    ],
+    "447113": [
+        "spell_damage",
+        "mana",
+        "magic_penetration"
+    ],
+    "447114": [
+        "health",
+        "armor",
+        "attack_speed",
+        "on_hit",
+        "magic_resist"
+    ],
+    "447115": [
+        "damage",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "447116": [
+        "damage",
+        "spell_damage",
+        "magic_penetration",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "447118": [
+        "health",
+        "damage",
+        "spell_damage",
+        "spell_vamp"
+    ],
+    "447119": [
+        "damage",
+        "attack_speed"
+    ],
+    "447120": [
+        "damage",
+        "attack_speed"
+    ],
+    "447121": [
+        "health",
+        "armor",
+        "damage",
+        "attack_speed",
+        "spell_damage",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "447122": [
+        "spell_block",
+        "attack_speed",
+        "on_hit",
+        "ability_haste"
+    ],
+    "447123": [
+        "spell_damage",
+        "mana_regen",
+        "ability_haste"
+    ],
+    "4628": [
+        "spell_damage",
+        "ability_haste"
+    ],
+    "4629": [
+        "health",
+        "spell_damage",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "4633": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "spell_vamp"
+    ],
+    "4635": [
+        "health",
+        "spell_damage",
+        "spell_vamp"
+    ],
+    "4636": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "4637": [
+        "health",
+        "spell_damage"
+    ],
+    "4641": [
+        "health",
+        "damage",
+        "spell_damage",
+        "mana_regen",
+        "vision",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "4643": [
+        "health",
+        "spell_block",
+        "armor",
+        "vision",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "4644": [
+        "health",
+        "spell_damage",
+        "mana",
+        "nonboots_movement",
+        "ability_haste"
+    ],
+    "4645": [
+        "spell_damage",
+        "magic_penetration"
+    ],
+    "4646": [
+        "spell_damage",
+        "gold_per",
+        "nonboots_movement",
+        "magic_penetration"
+    ],
+    "6035": [
+        "health",
+        "spell_block",
+        "damage",
+        "active",
+        "tenacity"
+    ],
+    "6333": [
+        "armor",
+        "damage",
+        "ability_haste"
+    ],
+    "6609": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6610": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6616": [
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6617": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6620": [
+        "health",
+        "spell_damage",
+        "mana_regen",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6621": [
+        "spell_damage",
+        "mana_regen"
+    ],
+    "6630": [
+        "health",
+        "damage",
+        "life_steal",
+        "active",
+        "cooldown_reduction",
+        "spell_vamp",
+        "ability_haste"
+    ],
+    "6631": [
+        "health",
+        "damage",
+        "attack_speed",
+        "slow",
+        "nonboots_movement"
+    ],
+    "6632": [
+        "health",
+        "damage",
+        "cooldown_reduction",
+        "on_hit",
+        "magic_penetration",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6653": [
+        "health",
+        "spell_damage"
+    ],
+    "6655": [
+        "spell_damage",
+        "mana",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6656": [
+        "health",
+        "spell_damage",
+        "mana",
+        "active",
+        "cooldown_reduction",
+        "slow",
+        "ability_haste"
+    ],
+    "6657": [
+        "health",
+        "health_regen",
+        "spell_damage",
+        "mana",
+        "mana_regen"
+    ],
+    "6662": [
+        "health",
+        "armor",
+        "cooldown_reduction",
+        "slow",
+        "on_hit",
+        "ability_haste"
+    ],
+    "6664": [
+        "health",
+        "spell_block",
+        "health_regen",
+        "aura",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "6665": [
+        "health",
+        "spell_block",
+        "armor",
+        "magic_resist"
+    ],
+    "6667": [
+        "health",
+        "spell_block",
+        "armor",
+        "aura",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6671": [
+        "damage",
+        "critical_strike",
+        "attack_speed",
+        "active",
+        "nonboots_movement"
+    ],
+    "6672": [
+        "damage",
+        "attack_speed",
+        "on_hit",
+        "nonboots_movement"
+    ],
+    "6673": [
+        "damage",
+        "critical_strike"
+    ],
+    "6675": [
+        "critical_strike",
+        "attack_speed",
+        "nonboots_movement"
+    ],
+    "6676": [
+        "damage",
+        "critical_strike",
+        "armor_penetration"
+    ],
+    "6677": [
+        "attack_speed",
+        "on_hit"
+    ],
+    "6691": [
+        "damage",
+        "stealth",
+        "cooldown_reduction",
+        "slow",
+        "nonboots_movement",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6692": [
+        "damage",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "6693": [
+        "damage",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6694": [
+        "damage",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6695": [
+        "damage",
+        "armor_penetration"
+    ],
+    "6696": [
+        "damage",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6697": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6698": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6699": [
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6700": [
+        "armor",
+        "damage",
+        "active",
+        "cooldown_reduction",
+        "armor_penetration",
+        "ability_haste"
+    ],
+    "6701": [
+        "damage",
+        "active",
+        "nonboots_movement",
+        "armor_penetration"
+    ],
+    "7050": [],
+    "8001": [
+        "health",
+        "active",
+        "cooldown_reduction",
+        "ability_haste"
+    ],
+    "8010": [
+        "health",
+        "spell_damage",
+        "cooldown_reduction",
+        "magic_penetration"
+    ],
+    "8020": [
+        "health",
+        "spell_block",
+        "spell_damage",
+        "cooldown_reduction",
+        "magic_resist",
+        "ability_haste"
+    ],
+    "9168": [],
+    "9171": [],
+    "9172": [],
+    "9173": [],
+    "9174": [],
+    "9175": [],
+    "9176": [],
+    "9177": [],
+    "9178": [],
+    "9179": [],
+    "9180": [],
+    "9181": [],
+    "9183": [],
+    "9184": [],
+    "9185": [],
+    "9187": [],
+    "9188": [],
+    "9189": [],
+    "9190": [],
+    "9192": [],
+    "9193": [],
+    "9271": [],
+    "9272": [],
+    "9273": [],
+    "9274": [],
+    "9275": [],
+    "9276": [],
+    "9277": [],
+    "9278": [],
+    "9279": [],
+    "9280": [],
+    "9281": [],
+    "9283": [],
+    "9284": [],
+    "9285": [],
+    "9287": [],
+    "9288": [],
+    "9289": [],
+    "9290": [],
+    "9292": [],
+    "9293": [],
+    "9300": [],
+    "9301": [],
+    "9302": [],
+    "9303": [],
+    "9304": [],
+    "9305": [],
+    "9306": [],
+    "9307": [],
+    "9308": [],
+    "9400": [],
+    "9401": [],
+    "9402": [],
+    "9403": [],
+    "9404": [],
+    "9405": [],
+    "9406": [],
+    "9407": [],
+    "9408": [],
+    "0": []
+}

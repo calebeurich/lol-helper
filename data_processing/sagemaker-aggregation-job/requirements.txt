@@ -1,0 +1,8 @@
+pandas
+boto3
+json
+os
+typing
+pyspark.sql
+urllib.parse
+enum
