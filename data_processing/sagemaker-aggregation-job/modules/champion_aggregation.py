@@ -8,8 +8,8 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
 # Open item_dict data
-json_path = os.path.join(os.path.dirname(__file__), "item_id_tags.json")
-with open(json_path, "r") as data:
+json_path = os.path.join(os.path.dirname(__file__), 'item_id_tags.json')
+with open(json_path, 'r') as data:
     items_dict = json.load(data)
 # Function to convert item ids into list of tags
 def item_ids_to_tags(row):
@@ -24,35 +24,35 @@ def summ_spells_per_game(row):
     return [get_summ_spell_name(row['summoner1Id']), get_summ_spell_name(row['summoner2Id'])]
 
 # Function to create a list with all match data
-def create_match_df(dataframe_csv: str) -> list[dict]:
-    df_all_matches = pd.read_csv(dataframe_csv)
-    df_all_matches["matchData"] = df_all_matches["matchData"].apply(json.loads)
+def create_match_df(raw_master_df: pd.DataFrame) -> list[dict]:
+    df_all_matches = raw_master_df
+    df_all_matches['matchData'] = df_all_matches['matchData'].apply(json.loads)
     df_participants = create_df_participants(df_all_matches)
     df_teams = create_df_teamdata(df_all_matches)
     return df_participants, df_teams  
     
 # Create a function to create a DataFrame from the participants column (i.e. a list of dictionaries)
 def create_df_participants(df_all_matches: pd.DataFrame) -> pd.DataFrame:
-    # Temporary code to filter by ranked games only (queuId = 420), will be removed once we include this logic where we pull match ids
-    df_all_matches["queueId"] = df_all_matches["matchData"].apply(lambda m: m["info"]["queueId"])
-    df_all_matches = df_all_matches[df_all_matches["queueId"] == 420].copy(deep = True)
-    # Actual function logic below remains unchanged
-    df_all_matches["participants"] = df_all_matches["matchData"].apply(lambda m: m["info"]["participants"])
-    df_exploded = df_all_matches.explode("participants").reset_index(drop=True)
-    df_participants = pd.json_normalize(df_exploded["participants"], sep = "_")
-    df_participants["matchId"] = df_exploded["matchData"].apply(lambda m: m["metadata"]["matchId"])
+    # Filter by ranked games only (queuId = 420), just in case some non ranked matches were pulled
+    df_all_matches['queueId'] = df_all_matches['matchData'].apply(lambda m: m['info']['queueId'])
+    df_all_matches = df_all_matches[df_all_matches['queueId'] == 420].copy(deep = True)
+    # Extract participant data
+    df_all_matches['participants'] = df_all_matches['matchData'].apply(lambda m: m['info']['participants'])
+    df_exploded = df_all_matches.explode('participants').reset_index(drop=True)
+    df_participants = pd.json_normalize(df_exploded['participants'], sep = '_')
+    df_participants['matchId'] = df_exploded['matchData'].apply(lambda m: m['metadata']['matchId'])
     return df_participants
 
 # Create a function to create a DataFrame with data from each team (each row is a team), like bans and objectives
 def create_df_teamdata(df_all_matches: pd.DataFrame) -> pd.DataFrame:
-    # Temporary code to filter by ranked games only (queuId = 420), will be removed once we include this logic where we pull match ids
-    df_all_matches["queueId"] = df_all_matches["matchData"].apply(lambda m: m["info"]["queueId"])
-    df_all_matches = df_all_matches[df_all_matches["queueId"] == 420].copy(deep = True)
-    # Actual function logic below remains unchanged
-    df_all_matches["teams"] = df_all_matches["matchData"].apply(lambda m: m["info"]["teams"])
-    df_exploded = df_all_matches.explode("teams").reset_index(drop=True)
-    df_teams = pd.json_normalize(df_exploded["teams"], sep = "_")
-    df_teams["matchId"] = df_exploded["matchData"].apply(lambda m: m["metadata"]["matchId"])
+    # Filter by ranked games only (queuId = 420), just in case some non ranked matches were pulled
+    df_all_matches['queueId'] = df_all_matches['matchData'].apply(lambda m: m['info']['queueId'])
+    df_all_matches = df_all_matches[df_all_matches['queueId'] == 420].copy(deep = True)
+    # Extract team data
+    df_all_matches['teams'] = df_all_matches['matchData'].apply(lambda m: m['info']['teams'])
+    df_exploded = df_all_matches.explode('teams').reset_index(drop=True)
+    df_teams = pd.json_normalize(df_exploded['teams'], sep = '_')
+    df_teams['matchId'] = df_exploded['matchData'].apply(lambda m: m['metadata']['matchId'])
     return df_teams
 
 def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFrame) -> pd.DataFrame:
@@ -391,141 +391,146 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
     ).round(2)
     
     # Calculate derived stats
-    champion_stats['kda'] = ((champion_stats['avg_kills'] + champion_stats['avg_assists']) / 
-                            champion_stats['avg_deaths']).round(2)
-    champion_stats['winrate'] = ((champion_stats['total_wins'] ) / 
-                            champion_stats['total_games_played_in_role']).round(2)
-    champion_stats['cs_per_minute'] = ((champion_stats['avg_cs'] + champion_stats['avg_neutral_monsters_cs']) / 
-                                      (champion_stats['avg_time_played_per_game'] / 60)).round(2)
-    champion_stats['gold_per_minute'] = (champion_stats['avg_gold_earned_per_game'] / 
-                                        (champion_stats['avg_time_played_per_game'] / 60)).round(2)
-    champion_stats['damage_per_minute'] = (champion_stats['avg_dmg_dealt_to_champions'] / 
-                                          (champion_stats['avg_time_played_per_game'] / 60)).round(2)
-    # Derived statistics related to avg first dragon tkdown timing
-    champion_stats['pct_first_drag_tkd_min_5to7'] = (((champion_stats['number_of_games_had_drag_tkd_min_5to7']) / 
-                                                      champion_stats['number_of_games_had_drag_tkd']) * 100).round(2)
-    champion_stats['pct_first_drag_tkd_min_7to11'] = (((champion_stats['number_of_games_had_drag_tkd_min_7to11']) / 
-                                                      champion_stats['number_of_games_had_drag_tkd']) * 100).round(2)
-    champion_stats['pct_first_drag_tkd_min_11to15'] = (((champion_stats['number_of_games_had_drag_tkd_min_11to15']) / 
-                                                      champion_stats['number_of_games_had_drag_tkd']) * 100).round(2)
-    champion_stats['pct_first_drag_tkd_min_15+'] = (((champion_stats['number_of_games_had_drag_tkd_min_15plus']) / 
-                                                      champion_stats['number_of_games_had_drag_tkd']) * 100).round(2)
-    # Percentage of games where X - derived statistics
-    champion_stats['pct_highest_dmg_in_match'] = (((champion_stats['total_games_with_highest_damage']) / 
-                                                      champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_highest_cc_in_match'] = (((champion_stats['total_games_with_highest_cc_score']) / 
-                                                      champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_highest_ward_kills_in_match'] = (((champion_stats['total_games_with_highest_wards_killed']) / 
-                                                      champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_fastest_supp_quest_in_match'] = (((champion_stats['total_games_first_supp_quest']) / 
-                                                      champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_first_to_buy_item_in_match'] = (((champion_stats['total_games_fastest_item_completion']) / 
-                                                      champion_stats['total_games_played_in_role']) * 100).round(2)
-    # Derived stats for early lane, kills
-    champion_stats['pct_games_first_blood_kill'] = (((champion_stats['total_games_first_blood_kill']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_games_first_blood_assist'] = (((champion_stats['total_games_first_blood_assist']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_with_early_lanephase_gold_exp_adv'] = (((champion_stats['total_games_with_early_lanephase_gold_exp_adv']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_with_lanephase_gold_exp_adv'] = (((champion_stats['total_games_with_lanephase_gold_exp_adv']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_games_jgler_had_early_tkdowns_in_all_lanes'] = (((champion_stats['total_games_jgler_had_early_tkdowns_in_all_lanes']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    # Derived stats related to early objs and misc
-    champion_stats['pct_of_games_team_took_first_baron'] = (((champion_stats['total_games_team_took_first_baron']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_team_took_first_drag'] = (((champion_stats['total_games_team_took_first_drag']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_team_took_first_inhib'] = (((champion_stats['total_games_team_took_first_inhib']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_games_team_took_first_herald'] = (((champion_stats['total_games_team_took_first_herald']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_team_took_first_turret'] = (((champion_stats['total_games_team_took_first_turret']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_with_perfect_drag_soul_taken'] = (((champion_stats['total_games_with_perfect_drag_soul_taken']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_first_turret_taken_by_team'] = (((champion_stats['total_games_first_turret_taken_by_team']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_that_are_perfect_games'] = (((champion_stats['total_games_that_are_perfect_games']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_indiv_killed_1st_tower'] = (((champion_stats['total_games_indiv_killed_1st_tower']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_indiv_tkdown_1st_tower'] = (((champion_stats['total_games_indiv_tkdown_1st_tower']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_indiv_had_1st_turret_assist'] = (((champion_stats['total_games_indiv_had_1st_turret_assist']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_indiv_took_1st_tower_quick'] = (((champion_stats['total_games_indiv_took_1st_tower_quick']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_with_open_nexus'] = (((champion_stats['total_games_with_open_nexus']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_ended_in_early_ff'] = (((champion_stats['total_games_ended_in_early_ff']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_ended_in_ff'] = (((champion_stats['total_games_ended_in_ff']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_team_ffd'] = (((champion_stats['total_games_team_ffd']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_danced_with_rift_herald'] = (((champion_stats['total_games_danced_with_rift_herald']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    champion_stats['pct_of_games_played_champ_select_position'] = (((champion_stats['total_games_played_champ_select_position']) / 
-                                                   champion_stats['total_games_played_in_role']) * 100).round(2)
-    # Item tags stats
-    champion_stats['pct_items_abilityhaste_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('AbilityHaste')) / 
-                                                    champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_spellblock_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('SpellBlock')) / 
-                                                  champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_armor_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
-                                             champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_criticalstrike_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('CriticalStrike')) / 
-                                                      champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_lifesteal_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('LifeSteal')) / 
-                                                 champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_nonbootsmovement_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
-                                                        champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_tenacity_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Tenacity')) / 
-                                                champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_armorpenetration_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('ArmorPenetration')) / 
-                                                        champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_healthregen_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
-                                                   champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_aura_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Aura')) / 
-                                            champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_attackspeed_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('AttackSpeed')) / 
-                                                   champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_goldper_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('GoldPer')) / 
-                                               champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_vision_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Vision')) / 
-                                              champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_jungle_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Jungle')) / 
-                                              champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_armor_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
-                                             champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_healthregen_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
-                                                   champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_active_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('Active')) / 
-                                              champion_stats['completed_items'] * 100).round(2)
-    champion_stats['pct_items_nonbootsmovement_tag'] = (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
-                                                        champion_stats['completed_items'] * 100).round(2)
-    # Summoner spell stats
-    champion_stats['pct_games_w_barrier'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('barrier')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_cleanse'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('cleanse')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_exhaust'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('exhaust')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_flash'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('flash')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_ghost'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ghost')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_heal'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('heal')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_ignite'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ignite')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_smite'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('smite')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    champion_stats['pct_games_w_teleport'] = (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('teleport')) / 
-                                              champion_stats['total_games_played_in_role'] * 100).round(2)
-    
+    new_columns = {
+        'kda' : ((champion_stats['avg_kills'] + champion_stats['avg_assists']) / 
+                champion_stats['avg_deaths']).round(2),
+        'winrate' : ((champion_stats['total_wins'] ) / 
+                    champion_stats['total_games_played_in_role']).round(2),
+        'cs_per_minute' : ((champion_stats['avg_cs'] + champion_stats['avg_neutral_monsters_cs']) / 
+                            (champion_stats['avg_time_played_per_game'] / 60)).round(2),
+        'gold_per_minute' : (champion_stats['avg_gold_earned_per_game'] / 
+                            (champion_stats['avg_time_played_per_game'] / 60)).round(2),
+        'damage_per_minute' : (champion_stats['avg_dmg_dealt_to_champions'] / 
+                                (champion_stats['avg_time_played_per_game'] / 60)).round(2),
+        # Derived statistics related to avg first dragon tkdown timing
+        'pct_first_drag_tkd_min_5to7' : (((champion_stats['number_of_games_had_drag_tkd_min_5to7']) / 
+                                        champion_stats['number_of_games_had_drag_tkd']) * 100).round(2),
+        'pct_first_drag_tkd_min_7to11' : (((champion_stats['number_of_games_had_drag_tkd_min_7to11']) / 
+                                            champion_stats['number_of_games_had_drag_tkd']) * 100).round(2),
+        'pct_first_drag_tkd_min_11to15' : (((champion_stats['number_of_games_had_drag_tkd_min_11to15']) / 
+                                            champion_stats['number_of_games_had_drag_tkd']) * 100).round(2),
+        'pct_first_drag_tkd_min_15+' : (((champion_stats['number_of_games_had_drag_tkd_min_15plus']) / 
+                                        champion_stats['number_of_games_had_drag_tkd']) * 100).round(2),
+        # Percentage of games where X - derived statistics
+        'pct_highest_dmg_in_match' : (((champion_stats['total_games_with_highest_damage']) / 
+                                        champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_highest_cc_in_match' : (((champion_stats['total_games_with_highest_cc_score']) / 
+                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_highest_ward_kills_in_match' : (((champion_stats['total_games_with_highest_wards_killed']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_fastest_supp_quest_in_match' : (((champion_stats['total_games_first_supp_quest']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_first_to_buy_item_in_match' : (((champion_stats['total_games_fastest_item_completion']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        # Derived stats for early lane, kills
+        'pct_games_first_blood_kill' : (((champion_stats['total_games_first_blood_kill']) / 
+                                        champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_games_first_blood_assist' : (((champion_stats['total_games_first_blood_assist']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_with_early_lanephase_gold_exp_adv' : (((champion_stats['total_games_with_early_lanephase_gold_exp_adv']) / 
+                                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_with_lanephase_gold_exp_adv' : (((champion_stats['total_games_with_lanephase_gold_exp_adv']) / 
+                                                        champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_games_jgler_had_early_tkdowns_in_all_lanes' : (((champion_stats['total_games_jgler_had_early_tkdowns_in_all_lanes']) / 
+                                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        # Derived stats related to early objs and misc
+        'pct_of_games_team_took_first_baron' : (((champion_stats['total_games_team_took_first_baron']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_team_took_first_drag' : (((champion_stats['total_games_team_took_first_drag']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_team_took_first_inhib' : (((champion_stats['total_games_team_took_first_inhib']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_games_team_took_first_herald' : (((champion_stats['total_games_team_took_first_herald']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_team_took_first_turret' : (((champion_stats['total_games_team_took_first_turret']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_with_perfect_drag_soul_taken' : (((champion_stats['total_games_with_perfect_drag_soul_taken']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_first_turret_taken_by_team' : (((champion_stats['total_games_first_turret_taken_by_team']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_that_are_perfect_games' : (((champion_stats['total_games_that_are_perfect_games']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_indiv_killed_1st_tower' : (((champion_stats['total_games_indiv_killed_1st_tower']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_indiv_tkdown_1st_tower' : (((champion_stats['total_games_indiv_tkdown_1st_tower']) / 
+                                                champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_indiv_had_1st_turret_assist' : (((champion_stats['total_games_indiv_had_1st_turret_assist']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_indiv_took_1st_tower_quick' : (((champion_stats['total_games_indiv_took_1st_tower_quick']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_with_open_nexus' : (((champion_stats['total_games_with_open_nexus']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_ended_in_early_ff' : (((champion_stats['total_games_ended_in_early_ff']) / 
+                                            champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_ended_in_ff' : (((champion_stats['total_games_ended_in_ff']) / 
+                                        champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_team_ffd' : (((champion_stats['total_games_team_ffd']) / 
+                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_danced_with_rift_herald' : (((champion_stats['total_games_danced_with_rift_herald']) / 
+                                                    champion_stats['total_games_played_in_role']) * 100).round(2),
+        'pct_of_games_played_champ_select_position' : (((champion_stats['total_games_played_champ_select_position']) / 
+                                                        champion_stats['total_games_played_in_role']) * 100).round(2),
+        # Item tags stats
+        'pct_items_abilityhaste_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('AbilityHaste')) / 
+                                        champion_stats['completed_items'] * 100).round(2),
+        'pct_items_spellblock_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('SpellBlock')) / 
+                                        champion_stats['completed_items'] * 100).round(2),
+        'pct_items_armor_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
+                                champion_stats['completed_items'] * 100).round(2),
+        'pct_items_criticalstrike_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('CriticalStrike')) / 
+                                            champion_stats['completed_items'] * 100).round(2),
+        'pct_items_lifesteal_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('LifeSteal')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_nonbootsmovement_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
+                                            champion_stats['completed_items'] * 100).round(2),
+        'pct_items_tenacity_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Tenacity')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_armorpenetration_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('ArmorPenetration')) / 
+                                            champion_stats['completed_items'] * 100).round(2),
+        'pct_items_healthregen_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
+                                        champion_stats['completed_items'] * 100).round(2),
+        'pct_items_aura_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Aura')) / 
+                                champion_stats['completed_items'] * 100).round(2),
+        'pct_items_attackspeed_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('AttackSpeed')) / 
+                                        champion_stats['completed_items'] * 100).round(2),
+        'pct_items_goldper_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('GoldPer')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_vision_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Vision')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_jungle_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Jungle')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_armor_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Armor')) / 
+                                champion_stats['completed_items'] * 100).round(2),
+        'pct_items_healthregen_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('HealthRegen')) / 
+                                        champion_stats['completed_items'] * 100).round(2),
+        'pct_items_active_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('Active')) / 
+                                    champion_stats['completed_items'] * 100).round(2),
+        'pct_items_nonbootsmovement_tag' : (champion_stats['item_tags'].apply(lambda tags: tags.count('NonbootsMovement')) / 
+                                            champion_stats['completed_items'] * 100).round(2),
+        # Summoner spell stats
+        'pct_games_w_barrier' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('barrier')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_cleanse' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('cleanse')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_exhaust' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('exhaust')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_flash' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('flash')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_ghost' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ghost')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_heal' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('heal')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_ignite' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('ignite')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_smite' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('smite')) / 
+                                champion_stats['total_games_played_in_role'] * 100).round(2),
+        'pct_games_w_teleport' : (champion_stats['summspells_per_game'].apply(lambda tags: tags.count('teleport')) / 
+                                    champion_stats['total_games_played_in_role'] * 100).round(2)
+    }
+
+    new_columns_df = pd.DataFrame(new_columns)
+
+    champion_stats = pd.concat([champion_stats, new_columns_df], axis=1)
 
     champion_stats = champion_stats.drop([
         'number_of_games_had_drag_tkd_min_5to7', 'number_of_games_had_drag_tkd_min_7to11', 'number_of_games_had_drag_tkd_min_11to15', 'number_of_games_had_drag_tkd_min_15plus',
@@ -548,7 +553,7 @@ def aggregate_champion_data(df_participants: pd.DataFrame, df_teams: pd.DataFram
 #total_games = champion_stats['total_games_played_in_role'].sum()
 
 
-def main_aggregator(raw_master_df_csv):
-    df_participants, df_teams = create_match_df(raw_master_df_csv)
+def main_aggregator(raw_master_df):
+    df_participants, df_teams = create_match_df(raw_master_df)
     champion_stats, filtered_df = aggregate_champion_data(df_participants, df_teams)
     return champion_stats

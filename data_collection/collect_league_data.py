@@ -1,3 +1,5 @@
+### CONSIDER OUTPUTTING STRAIGHT TO AGGREGATION AS PYTHON OBJECTS INSTEAD OF CSV ###
+
 import pandas as pd
 import os
 import requests
