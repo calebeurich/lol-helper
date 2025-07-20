@@ -584,7 +584,6 @@ def filter_position_specific_metrics(participants_df: DataFrame) -> DataFrame:
 
 def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells):
     window = Window.partitionBy("champion_id")
-    MIN_PLAY_RATE = 5
     
     intermediate_df = (
         merged_df # line 590
@@ -898,6 +897,8 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells):
                 F.collect_list("team_position")
             )[0].alias("mode_team_position"),
 
+            # CONSIDER EXPLORATORY FEATURE ANALYSIS TO EVALUATE
+
             ##### Had to use alternate methor as SageMaker does not support Spark 3.4, which is where F.mode was added
             #F.mode("individual_position").alias("mode_individual_position"), # Best guess for which position the player actually played in isolation of anything else
             #F.mode("lane").alias("mode_lane"), # Gives slightly different string than above, might have something to do with where champ spent most of the time
@@ -949,7 +950,6 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells):
             "pct_games_first_to_complete_item",
             (F.col("total_games_fastest_item_completion") * 100 / F.col("total_games_played_in_role"))
         )
-        .filter(F.col("role_play_rate") >= MIN_PLAY_RATE)
     )
 
     final_df = intermediate_df

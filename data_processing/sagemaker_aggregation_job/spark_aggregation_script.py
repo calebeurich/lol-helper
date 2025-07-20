@@ -27,8 +27,11 @@ if __name__ == "__main__":
         args.items_json_path
     )
 
-    output_path = f"file://{args.output_path}"
-    print(f"Writing to local filesystem at: {output_path}")
+    print(f"Aggregation completed; writing output as csv to {args.output_path}")
+
+    # Create a subdirectory that Spark can manage
+    output_path = f"file://{args.output_path}/spark_output"
+    print(f"Writing to: {output_path}")
 
     (aggregated_by_champion_df
         .coalesce(1)
