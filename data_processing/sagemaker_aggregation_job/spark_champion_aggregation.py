@@ -7,7 +7,7 @@ from pyspark.sql import functions as F
 from enum import Enum
 
 RANKED_SOLO_DUO_QUEUE_ID = 420
-DEFAULT_PARTITIONS = 200
+DEFAULT_PARTITIONS = 100
 PATCH_ERROR_PATTERN = r"Patch Error: Patch \d+(\.\d+)?"
 
 # Column and field name constants
@@ -285,6 +285,7 @@ def create_matches_df(
     teams_df = explode_and_flatten_struct(ranked_matches_df, "teams")
 
     filtered_by_patch_df.unpersist()
+    json_rdd.unpersist()
 
     return participants_df, teams_df
 
@@ -582,14 +583,20 @@ def filter_position_specific_metrics(participants_df: DataFrame) -> DataFrame:
     return result_df
 
 
-def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells):
-    window = Window.partitionBy("champion_id")
-    
-    intermediate_df = (
-        merged_df # line 590
-        .withColumn("total_games_per_champion", F.count("*").over(window))
+def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granularity="champion_x_role"): # Add granularity input
+    if granularity == "champion_x_role":
+        grouping = ["champion_id", "champion_name","team_position"]
+        window = Window.partitionBy("champion_id")
+    elif granularity == "champion_x_role_x_user":
+        grouping = ["champion_id", "champion_name","team_position", "puuid"]
+        window = Window.partitionBy("puuid", "champion_id")
+    else:
+        raise ValueError("Incorrect granularity input, must be 'champion_x_role' or 'champion_x_role_x_user'")        
 
-        .groupBy("champion_id", "champion_name","team_position")
+    intermediate_df = (
+        merged_df
+        .withColumn("total_games_per_champion", F.count("*").over(window))
+        .groupBy(*grouping)
         .agg(
             F.count("*").alias("total_games_played_in_role"),
             F.first("total_games_per_champion").alias("total_games_per_champion"), # Used for filtering minimum games in role
@@ -996,6 +1003,17 @@ def main_aggregator(
         how = "left"
     )
 
-    grouped_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells)
+    champion_x_role_df = aggregate_champion_data(
+        merged_df, 
+        all_item_tags, 
+        all_summoner_spells, 
+        granularity="champion_x_role"
+    )
+    champion_x_role_x_user_df = aggregate_champion_data(
+        merged_df, 
+        all_item_tags, 
+        all_summoner_spells, 
+        granularity="champion_x_role_x_user"
+    )
 
-    return grouped_df
+    return champion_x_role_df, champion_x_role_x_user_df
