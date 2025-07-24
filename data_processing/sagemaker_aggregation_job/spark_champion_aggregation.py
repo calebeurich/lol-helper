@@ -278,7 +278,8 @@ def create_matches_df(
 
     participants_df = explode_and_flatten_struct(ranked_matches_df, "participants")
     participants_df = participants_df.filter(
-            F.col("team_position").isNotNull()
+            (F.col("team_position").isNotNull()) &
+            (F.col("team_position") != "")
     )
 
     # ========== Explode and Flatten Struct ==========
