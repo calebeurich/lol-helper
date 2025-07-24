@@ -583,15 +583,19 @@ def filter_position_specific_metrics(participants_df: DataFrame) -> DataFrame:
     return result_df
 
 
-def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granularity="champion_x_role"): # Add granularity input
+def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granularity="champion_x_role", single_user_puuid = None): # Add granularity input
     if granularity == "champion_x_role":
         grouping = ["champion_id", "champion_name","team_position"]
         window = Window.partitionBy("champion_id")
     elif granularity == "champion_x_role_x_user":
         grouping = ["champion_id", "champion_name","team_position", "puuid"]
         window = Window.partitionBy("puuid", "champion_id")
+    elif granularity == "single_user":
+        merged_df = merged_df.filter(merged_df.puuid == single_user_puuid)
+        grouping = ["champion_id", "champion_name","team_position"]
+        window = Window.partitionBy("champion_id")
     else:
-        raise ValueError("Incorrect granularity input, must be 'champion_x_role' or 'champion_x_role_x_user'")        
+        raise ValueError("Incorrect granularity input, must be 'champion_x_role', 'champion_x_role_x_user' or 'single_user'")        
 
     intermediate_df = (
         merged_df
@@ -977,7 +981,9 @@ Finally, match_data will be dropped
 def main_aggregator(
     spark: SparkSession,
     csv_file_path: str,
-    items_json_path: str
+    items_json_path: str,
+    single_user_flag: bool = False,
+    single_user_puuid: str = None
 ) -> DataFrame:
     participants_df, teams_df = create_matches_df(spark, csv_file_path)
     
@@ -1003,17 +1009,29 @@ def main_aggregator(
         how = "left"
     )
 
-    champion_x_role_df = aggregate_champion_data(
-        merged_df, 
-        all_item_tags, 
-        all_summoner_spells, 
-        granularity="champion_x_role"
-    )
-    champion_x_role_x_user_df = aggregate_champion_data(
-        merged_df, 
-        all_item_tags, 
-        all_summoner_spells, 
-        granularity="champion_x_role_x_user"
-    )
+    if single_user_flag:
+        single_user_df = aggregate_champion_data(
+            merged_df, 
+            all_item_tags, 
+            all_summoner_spells, 
+            "single_user",
+            single_user_puuid
+        )
 
-    return champion_x_role_df, champion_x_role_x_user_df
+        return single_user_df
+
+    else:    
+        champion_x_role_df = aggregate_champion_data(
+            merged_df, 
+            all_item_tags, 
+            all_summoner_spells, 
+            granularity="champion_x_role"
+        )
+        champion_x_role_x_user_df = aggregate_champion_data(
+            merged_df, 
+            all_item_tags, 
+            all_summoner_spells, 
+            granularity="champion_x_role_x_user"
+        )
+
+        return champion_x_role_df, champion_x_role_x_user_df
