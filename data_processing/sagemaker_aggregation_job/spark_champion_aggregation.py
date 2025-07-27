@@ -695,7 +695,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("challenges.quick_solo_kills").alias("avg_quick_solo_kills"),
             F.avg("challenges.solo_kills").alias("avg_solo_kills"),
             F.avg("challenges.takedowns_after_gaining_level_advantage").alias("avg_takedowns_after_gaining_lvl_advantage"),
-            F.avg("challenges.kills_on_other_lanes_early_jungle_as_laner").alias("avg_kills_on_other_lanes_early_as_jungler"),
+            F.avg("challenges.kills_on_other_lanes_early_jungle_as_laner").alias("avg_kills_on_other_lanes_early_as_laner"),
             F.avg("challenges.save_ally_from_death").alias("avg_times_save_ally_from_death"),
             F.avg("challenges.takedowns_in_alcove").alias("avg_takedowns_in_alcove"),
                 # First blood and early kills

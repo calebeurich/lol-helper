@@ -6,9 +6,11 @@ import boto3, os, sagemaker
 
 # Load environment variables and set up
 load_dotenv()
-BUCKET = os.getenv("BUCKET")
 REGION = os.getenv("REGION")
 ROLE = os.getenv("ROLE")
+INPUT_PATH = os.getenv("CHAMPIONS_RAW_DATA_PATH")
+OUTPUT_PATH = os.getenv("CHAMPIONS_PROCESSED_DATA_PATH")
+DATA_MAPPING_PATH = os.getenv("DATA_MAPPING_PATH")
 
 session = sagemaker.Session(boto3.Session(region_name=REGION))
 
@@ -51,18 +53,18 @@ spark_processor.run(
     configuration=spark_config,
     inputs          = [
         ProcessingInput(
-            source      = f"s3://{BUCKET}/raw_data/match_data/patch_15_6/",
+            source      = INPUT_PATH,
             destination = "/opt/ml/processing/input"
         ),
         ProcessingInput(
-            source      = f"s3://{BUCKET}/dependencies/item_id_tags.json",
+            source      = DATA_MAPPING_PATH,
             destination = "/opt/ml/processing/config"
     ),
     ],
     outputs         = [
         ProcessingOutput(
             source      = f"/opt/ml/processing/output",
-            destination = f"s3://{BUCKET}/processed_data/champion_data/patch_15_6/"
+            destination = OUTPUT_PATH
         )
     ]
 )
