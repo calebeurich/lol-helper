@@ -1,9 +1,12 @@
+from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from spark_champion_aggregation import main_aggregator
 
-import argparse
+import argparse, os
 
-TEST_USER_PUUID = "Ou6LPc4Q_QF6qOQ69SBz5oZAY3dnaniTyKH9hE8fsGBWFveaXiYtrL_sQizh5_tPb6BUP3QHieQVAA"
+# Load environment variables and set up
+load_dotenv()
+TEST_USER_PUUID = os.getenv("TEST_USER_PUUID")
 
 if __name__ == "__main__":
     # Use --input-path and --output-path from CLI

@@ -1,5 +1,3 @@
-### CONSIDER OUTPUTTING STRAIGHT TO AGGREGATION AS PYTHON OBJECTS INSTEAD OF CSV ###
-
 import pandas as pd
 import os
 import requests
@@ -37,115 +35,255 @@ SUMMONER_PUUID_FILE = "puuids_and_summids.csv"
 MATCH_IDS_FILE = "match_ids.csv"
 MATCH_DATA_FILE = "match_data.csv"
 
-pd.set_option('display.max_columns', None)
 
 def handle_rate_limit(api_calls: int, start_time: float, buffer: int = 5) -> tuple[int, float]:
-    """Handle Riot API rate limiting"""
-    if api_calls >= (100 - buffer):  # 100 requests per 2 min, with buffer
+    """
+    Pause execution to respect the Riot API rate limit window if nearing the allowed number of calls.
+
+    Parameters
+    ----------
+    api_calls : int
+        Number of API calls made so far in the current window.
+    start_time : float
+        Epoch timestamp when the current rate-limit window began.
+    buffer : int, optional
+        Safety buffer to stay below the hard limit (default is 5).
+
+    Returns
+    -------
+    api_calls : int
+        Reset to 0 if we slept; otherwise unchanged.
+    start_time : float
+        Updated to now if we slept; otherwise unchanged.
+    """
+    LIMIT = 100
+    WINDOW = 120 # Seconds
+
+    if api_calls >= (LIMIT - buffer):  # 100 requests per 2 min, with buffer
         elapsed = time.time() - start_time
-        if elapsed < 120:  # 2 minute window
-            sleep_time = 120 - elapsed + 1  # Add 1 second buffer
-            tqdm.write(f'Rate limit approaching - sleeping for {sleep_time:.1f} seconds')
+        if elapsed < WINDOW:  # 2 minute window
+            sleep_time = WINDOW - elapsed + 1  # Add 1 second buffer
+            tqdm.write(f"Rate limit approaching - sleeping for {sleep_time:.1f}s")
             time.sleep(sleep_time)
         start_time = time.time()
         api_calls = 0
+
     return api_calls, start_time
 
+
 def get_summoner_ids_from_api(api_url: str, req_type: str) -> List[str]:
-    """Fetch summoner IDs from Riot API"""
-    time.sleep(0.05)  # Ensure we don't exceed 20 requests/sec
-    summoner_ids = []
+    """
+    Fetch summoner IDs from Riot API for a specific league division.
+    
+    Parameters
+    ----------
+    api_url : str
+        The complete API endpoint URL to fetch summoner data from.
+    req_type : str
+        Type of league request - either 'apex' (Master, Grandmaster, Challenger)
+        or 'regular' (Diamond divisions). Determines the response structure parsing.
+    
+    Returns
+    -------
+    List[str]
+        List of summoner IDs retrieved from the API response.
+        Returns empty list if the request fails.
+    
+    Notes
+    -----
+    - Apex leagues return all entries in a single call under 'entries' key
+    - Regular leagues return entries directly as a list (one page at a time)
+    - Implements a 50ms delay to respect rate limits
+    - Uses global HEADERS for API authentication
+    """
+    time.sleep(0.05)  # Rate limit protection
+    
     try:
-        resp = requests.get(api_url, headers=HEADERS)
-        resp.raise_for_status()
-        response = resp.json()
+        response = requests.get(api_url, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
         
         if req_type == "apex":
-            entries = response.get('entries', [])
-            summoner_ids = [entry['summonerId'] for entry in entries]
+            entries = data.get("entries", [])
+            return [entry["summonerId"] for entry in entries]
         elif req_type == "regular":
-            summoner_ids = [entry['summonerId'] for entry in response]
-            
-    except requests.HTTPError:
-        tqdm.write("Couldn't complete request")   
+            return [entry["summonerId"] for entry in response]
+        elif req_type is None:
+            raise ValueError("Missing request type")
+        else:
+            raise ValueError(f"Request type must be either 'apex' or 'regular', instead got {req_type}")
+
+    except requests.exceptions.RequestException as e:
+        tqdm.write(f"API request failed: {type(e).__name__} - {str(e)}")
+        return []
+    except (KeyError, ValueError) as e:
+        tqdm.write(f"Failed to parse response: {type(e).__name__} - {str(e)}")
+        return []
     
-    return summoner_ids
 
 def get_sums_for_apex_leagues() -> List[str]:
-    """Collect summoner IDs from apex leagues"""
+    """
+    Collect summoner IDs from all apex tier leagues.
+    
+    Retrieves summoner IDs from Master, Grandmaster, and Challenger leagues
+    by making one API call per league tier.
+    
+    Returns
+    -------
+    List[str]
+        Combined list of summoner IDs from all apex leagues.
+        
+    Notes
+    -----
+    - Uses global APEX_TIERS constant for league iteration
+    - Each apex league returns all entries in a single API call
+    - Shows progress using tqdm progress bar
+    """
     apex_summoner_ids = []
+
     for apex_league in tqdm(APEX_TIERS, desc="Fetching apex leagues"):
         api_url = f"https://na1.api.riotgames.com/lol/league/v4/{apex_league}/by-queue/RANKED_SOLO_5x5"
         summoner_ids = get_summoner_ids_from_api(api_url, "apex")
         apex_summoner_ids.extend(summoner_ids)
+
     return apex_summoner_ids
 
+
 def get_sums_for_reg_divisions(start_time: float) -> List[str]:
-    """Collect summoner IDs from regular divisions"""
+    """
+    Collect summoner IDs from regular (non-apex) divisions with pagination.
+    
+    Iterates through Diamond divisions (IV, III, II, I) and retrieves all
+    summoner IDs using paginated API calls, respecting rate limits.
+    
+    Parameters
+    ----------
+    start_time : float
+        Unix timestamp marking the start of the current rate limit window.
+        Used to track and enforce API rate limiting.
+        
+    Returns
+    -------
+    List[str]
+        Combined list of summoner IDs from all regular divisions.
+        
+    Notes
+    -----
+    - Starts with api_calls=3 to account for preceding apex league calls
+    - Implements pagination for each division/tier combination
+    - Uses handle_rate_limit to ensure compliance with 100 requests/2 minutes
+    - Shows nested progress bars for divisions and tiers
+    """
     api_calls = 3  # starts at 3 since there should be 3 apex tier calls before this
     reg_division_ids = []
     
     for division in tqdm(DIVISIONS, desc="Processing divisions"):
         for tier in tqdm(TIERS, desc=f"Processing {division} tiers", leave=False):
             page = 1
+
             while True:
                 api_calls, start_time = handle_rate_limit(api_calls, start_time)
                 
                 api_url = f'https://na1.api.riotgames.com/lol/league/v4/entries/RANKED_SOLO_5x5/{division}/{tier}?page={page}'
-                output_list = get_summoner_ids_from_api(api_url, "regular")
+                summoner_ids = get_summoner_ids_from_api(api_url, "regular")
                 
-                if not output_list:
+                if not summoner_ids:
                     break
                     
-                reg_division_ids.extend(output_list)
+                reg_division_ids.extend(summoner_ids)
                 page += 1
                 api_calls += 1
                 
     return reg_division_ids
 
+
 def collect_summoner_ids() -> None:
-    """Collect and save summoner IDs"""
-    start = time.time()
+    """
+    Retrieve summoner IDs from Apex leagues and regular Diamond+ divisions, deduplicate them,
+    and save the unique IDs to a CSV file.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
+    start_time = time.time()
     tqdm.write("Collecting summoner IDs...")
     
-    all_sum_ids = get_sums_for_apex_leagues()
-    all_sum_ids.extend(get_sums_for_reg_divisions(start))
+    # Fetch from Apex leagues and regular divisions
+    apex_ids = get_sums_for_apex_leagues()
+    regular_ids = get_sums_for_reg_divisions(start_time)
+
+    # Deduplicate
+    unique_ids = set(apex_ids)
+    unique_ids.update(regular_ids)
+
+    # Persist to disk
+    df = pd.DataFrame({"summonerId": list(unique_ids)})
+    df.to_csv(SUMMONER_IDS_FILE, index=False)
     
-    # Remove duplicates and save
-    all_sum_ids = list(set(all_sum_ids))
-    pd.DataFrame({"summonerId": all_sum_ids}).to_csv(SUMMONER_IDS_FILE, index=False)
-    
-    tqdm.write(f"Total unique summoner IDs collected: {len(all_sum_ids)}")
+    tqdm.write(f"Total unique summoner IDs collected: {len(unique_ids)}")
+
 
 def get_puuid(summoner_ids_file: str) -> None:
-    """Fetch PUUIDs for summoner IDs"""
-    df_summids = pd.read_csv(summoner_ids_file)
+    """
+    Fetch PUUIDs for summoner IDs and save to CSV file.
     
-    # Check if match_data csv file/dataframe already exists and create it if it does not
+    Reads summoner IDs from input file, fetches corresponding PUUIDs from 
+    Riot API, and appends results to output CSV. Implements checkpointing 
+    to avoid reprocessing already fetched PUUIDs.
+    
+    Parameters
+    ----------
+    summoner_ids_file : str
+        Path to CSV file containing summoner IDs to process.
+        Expected to have a 'summonerId' column.
+     
+    Returns
+    -------
+    None
+        Results are written directly to SUMMONER_PUUID_FILE.
+        
+    Notes
+    -----
+    - Skips summoner IDs that have already been processed
+    - Implements rate limiting (100 requests per 2 minutes)
+    - Writes to file every 100 records for data safety
+    - Handles various API errors with appropriate retry logic
+    - Uses append mode to avoid memory issues with large datasets
+    """
+    summoner_ids_df = pd.read_csv(summoner_ids_file)
+    
+    # Check for existing processed summoner IDs
     try:
         existing_data = pd.read_csv(SUMMONER_PUUID_FILE)
-        # Find already processed matches to skip them
-        processed_summids = set(existing_data[existing_data['puuid'].notna()]['summonerId'])
+        processed_summoner_ids = set(existing_data[existing_data["puuid"].notna()]["summonerId"])
     except FileNotFoundError:
-        existing_data = df_summids['summonerId'].copy()
-        processed_summids = set()
+        processed_summoner_ids = set()
 
-    # Open file in append mode to avoid reading/writing the whole file
-    with open(SUMMONER_PUUID_FILE, 'a+', newline='') as f_output:
+    # Open file in append mode for efficient writing
+    with open(SUMMONER_PUUID_FILE, "a+", newline="") as f_output:
         writer = csv.writer(f_output)
+
         # Write header if file is empty
         if f_output.tell() == 0:
-            writer.writerow(['summonerId', 'puuid'])
+            writer.writerow(["summonerId", "puuid"])
 
         row_counter = 0
         api_calls = 0
         start_time = time.time()
 
-        # Only process matches not already in the output file
-        summids_to_process = [summid for summid in df_summids['summonerId'] if summid not in processed_summids]
+        # Filter out already processed summoner IDs
+        summoner_ids_to_process = [
+            summid for summid in summoner_ids_df['summonerId'] 
+            if summid not in processed_summoner_ids
+        ]
 
         try:
-            for summoner_id in tqdm(summids_to_process, desc='Fetching puuids'):
+            for summoner_id in tqdm(summoner_ids_to_process, desc='Fetching puuids'):
                 api_calls, start_time = handle_rate_limit(api_calls, start_time)
                 
                 api_url = f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/{summoner_id}"
@@ -156,20 +294,12 @@ def get_puuid(summoner_ids_file: str) -> None:
                     response.raise_for_status()
                     summoner_data = response.json()
 
-                    # Check response structure and patch
-                    if 'puuid' in summoner_data:
-                        # Write directly into file instead of a growing dataframe
-                        writer.writerow([
-                            summoner_id,
-                            summoner_data.get("puuid", "Puuid not found in JSON response")
-                        ])
-                    else:
-                        writer.writerow([
-                            summoner_id,
-                            summoner_data.get("puuid", "Puuid not in JSON response")
-                        ])
+                    # Extract PUUID and write to file
 
-                    time.sleep(0.05)
+                    puuid = summoner_data.get("puuid", "PUUID not found")
+                    writer.writerow([summoner_id, puuid])
+
+                    time.sleep(0.05) # Respect per-second rate limit
                     api_calls += 1
                     row_counter += 1
 
@@ -179,36 +309,36 @@ def get_puuid(summoner_ids_file: str) -> None:
                         gc.collect()
                 
                 except requests.Timeout:
-                    print(f'Request timeout for summoner {summoner_id}, continuing...')
+                    tqdm.write(f'Request timeout for summoner {summoner_id}, skipping...')
                     continue
 
                 except requests.HTTPError as e:
-                    print(f'HTTP Error for summoner {summoner_id}: {e}')
-                    if e.response.status_code == 403 or e.response.status_code == 400:
-                        print('Probably expired API key')
+                    if e.response.status_code in (400, 403):
+                        tqdm.write(f'Authentication error ({e.response.status_code}): Check API key')
                         return
                     elif e.response.status_code == 429:
-                        wait = time.sleep(121 - (time.time() - start_time))
-                        print(f'Rate limit exceeded, waiting {wait} seconds')
+                        wait_time = max(0, 121 - (time.time() - start_time))
+                        tqdm.write(f'Rate limit exceeded, waiting {wait_time:.1f} seconds')
+                        time.sleep(wait_time)
                         api_calls = 0
                         start_time = time.time()
-                    # Handle gateway timeouts
                     elif e.response.status_code == 504:
-                        print(f'Gateway timeout for summoner {summoner_id}, waiting 30 seconds and retrying...')
+                        tqdm.write(f'Gateway timeout for summoner {summoner_id}, retrying after 30s...')
                         time.sleep(30)
-                        # Retry same match matchdata pull
                         continue
-
+                    else:
+                        tqdm.write(f'HTTP Error {e.response.status_code} for summoner {summoner_id}')
+                        continue
                     
                 except Exception as e:
-                    print(f"Error with summoner {summoner_id}: {str(e)}")
+                    tqdm.write(f"Unexpected error for summoner {summoner_id}: {type(e).__name__}")
                     continue
 
         except KeyboardInterrupt:
-            print('Process interrupted by user')
+            tqdm.write('\nProcess interrupted by user')
             return
         
-        print(f'Completed processing {row_counter} summoners')
+        tqdm.write(f'Completed processing {row_counter} summoners')
 
 
 def collect_match_ids(summoner_data_file: str, patch_start_time: str, patch_end_time: str, matches_per_summoner: int = 100) -> None:

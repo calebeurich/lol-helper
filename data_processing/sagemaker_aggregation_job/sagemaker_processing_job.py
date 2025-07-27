@@ -1,11 +1,14 @@
+from dotenv import load_dotenv
 from sagemaker.spark.processing import PySparkProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
-import boto3
-import sagemaker
 
-BUCKET = "lolhelper"
-REGION = "us-east-2"
-ROLE = "arn:aws:iam::550149510806:role/sagemaker-processing-role"
+import boto3, os, sagemaker
+
+# Load environment variables and set up
+load_dotenv()
+BUCKET = os.getenv("BUCKET")
+REGION = os.getenv("REGION")
+ROLE = os.getenv("ROLE")
 
 session = sagemaker.Session(boto3.Session(region_name=REGION))
 
