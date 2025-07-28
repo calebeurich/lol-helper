@@ -7,6 +7,7 @@ import argparse, os
 # Load environment variables and set up
 load_dotenv()
 TEST_USER_PUUID = os.getenv("TEST_USER_PUUID")
+PATCH = "15_6"
 
 if __name__ == "__main__":
     # Use --input-path and --output-path from CLI
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     print(f"Aggregation completed; writing output as csv to {args.output_path}")
 
     # Create a subdirectory that Spark can manage
-    single_user_user_output_path = f"file://{args.output_path}/single_user_output"
+    single_user_user_output_path = f"file://{args.output_path}/single_user_data/patch_{PATCH}"
     print(f"Writing to: {single_user_user_output_path}")
     
     (single_user_df

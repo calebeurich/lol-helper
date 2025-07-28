@@ -16,32 +16,29 @@ MATCH_ID = "match_id"
 TEAM_POSITION = "team_position"
 
 # Role specific metrics
-JUNGLER_METRICS = {
-    "jungler_kills_early_jungle": "challenges.jungler_kills_early_jungle",
-    "kills_on_laners_early_jungle_as_jungler": "challenges.kills_on_laners_early_jungle_as_jungler"
+    # challenges.mejais_full_stack_in_time
+
+POSITION_SPECIFIC_METRICS = {
+    "JUNGLE": {
+        "jungler_kills_early_jungle": "challenges.jungler_kills_early_jungle", # As a jungler, get kills on the enemy jungler in their own jungle before 10 minutes
+        "kills_on_laners_early_jungle_as_jungler": "challenges.kills_on_laners_early_jungle_as_jungler", # As a jungler, get kills on top lane, mid lane, bot lane, or support players before 10 minutes
+        "more_enemy_jungle_cs_than_opponent_as_jungler": "challenges.more_enemy_jungle_than_opponent" # As a jungler, before 10 minutes, take more of the opponent's jungle than them
+    },
+    "UTILITY": {
+        "complete_support_quest_in_time": "challenges.complete_support_quest_in_time"
+    }
 }
-SUPPORT_METRICS = {
-    "complete_support_quest_in_time": "challenges.complete_support_quest_in_time"
-}
+
+LANER_SPECIFIC_METRICS = {
+    "kills_on_other_lanes_early_as_laner": "challenges.kills_on_other_lanes_early_jungle_as_laner", # As a laner, in a single game, get kills before 10 minutes outside your lane (anyone but your lane opponent)
+    "takedowns_in_all_lanes_early_as_laner": "challenges.get_takedowns_in_all_lanes_early_jungle_as_laner" # As a laner, get a takedown in all three lanes within 10 minutes
+} 
+
+
 # Add additional role-specific metrics below if needed
 TOP_METRICS = {} 
 MID_METRICS = {}
 BOT_METRICS = {}
-
-class TeamPosition(Enum): 
-    JUNGLE = ("JUNGLE", JUNGLER_METRICS)
-    SUPPORT = ("UTILITY", SUPPORT_METRICS)  # Note: UTILITY is the internal name for Support
-    TOP = ("TOP", TOP_METRICS)
-    MID = ("MIDDLE", MID_METRICS)
-    BOT = ("BOTTOM", BOT_METRICS)
-
-    def __init__(self, label: str, metrics: dict):
-        self.label = label
-        self.metrics = metrics
-
-    def __str__(self):
-        """String representation for better logging."""
-        return f"{self.name}({self.label})"
 
 class DragonTimings:
     """Dragon timing thresholds in seconds."""
@@ -520,68 +517,84 @@ def derive_participant_dragon_stats(participants_df: DataFrame):
     return participants_df_with_dragon_stats
 
 
-def filter_position_specific_metrics(participants_df: DataFrame) -> DataFrame:
+def extract_fields_with_exclusions(
+    df: DataFrame,
+    position_specific_fields: dict = POSITION_SPECIFIC_METRICS,
+    laner_specific_fields: dict = LANER_SPECIFIC_METRICS,
+    all_positions: list = None,
+    position_column: str = "team_position",
+    match_data_column: str = "match_data"
+) -> DataFrame:
     """
-    Filter challenge metrics to only appear for players in their appropriate roles.
-    
-    This function creates role-specific columns that contain challenge metrics only
-    for players who played the corresponding role. Players in other roles will have
-    null values for metrics that don't apply to their position.
-    
-    Parameters
-    ----------
-    participants_df : pyspark.sql.DataFrame
-        DataFrame containing participant data with columns:
-        - team_position: Player's assigned role ('JUNGLE', 'UTILITY', 'TOP', 'MIDDLE', 'BOTTOM')
-        - challenges.*: Nested structure containing various challenge metrics
-        
-    Returns
-    -------
-    pyspark.sql.DataFrame
-        Original DataFrame with additional role-specific metric columns.
-        Each metric column contains values only for the appropriate role,
-        with null values for all other roles.
-        
-    Raises
-    ------
-    ValueError
-        If required columns are missing from input DataFrame.
-        
-    Examples
-    --------
-    >>> result_df = filter_position_specific_metrics(participants_df)
-    >>> # Verify jungler metrics only appear for junglers
-    >>> result_df.groupBy("team_position").agg(
-    ...     F.count(F.when(F.col("jungler_kills_early_jungle").isNotNull(), 1))
-    ... ).show()
-    
-    Notes
-    -----
-    - Currently only JUNGLE and SUPPORT roles have defined metrics
-    - Other roles (TOP, MID, BOT) will pass through without new columns
-    - 'UTILITY' is the internal identifier for the Support role
+    Extracts fields with position-specific logic and exclusions.
     """
+    if all_positions is None:
+        all_positions = ["JUNGLE", "MID", "BOTTOM", "UTILITY", "TOP"]
     
-    # ========== Required Columns Validation ==========
-    required_columns = [TEAM_POSITION]
-    existing_columns = participants_df.columns
-    missing_columns = set(required_columns) - set(existing_columns)
-    if missing_columns:
-        raise ValueError(f"Missing required columns: {missing_columns}")
-
-    # ========== Flattening Metrics when Role Condition Met ==========
-    result_df = participants_df
-    for role in TeamPosition:
-        role_condition = F.col(TEAM_POSITION) == role.label
-        
-        for metric_name, challenge_path in role.metrics.items():
-            result_df = result_df.withColumn(
-                metric_name,
-                F.when(role_condition, F.col(challenge_path)).otherwise(None)
+    # Collect all operations
+    operations = []
+    
+    # Add position-specific fields
+    for position, field_mappings in position_specific_fields.items():
+        for new_col, field_path in field_mappings.items():
+            operations.append({
+                "new_col": new_col,
+                "condition": F.col(position_column) == position,
+                "field_path": field_path
+            })
+    
+    # Add laner specific fields
+    non_jungle_positions = [pos for pos in all_positions if pos != "JUNGLE"]
+    
+    for new_col, field_path in laner_specific_fields.items():
+        for position in non_jungle_positions:
+            position_col_name = f"{position.lower()}_{new_col}"
+            operations.append({
+                "new_col": position_col_name,
+                "condition": F.col(position_column) == position,
+                "field_path": field_path
+            })
+    
+    # Create all columns in one select - WITH NULL SAFETY
+    select_exprs = [df["*"]] + [
+        F.when(
+            op["condition"],
+            # Use coalesce to handle missing fields - returns 0 if field doesn't exist
+            F.coalesce(
+                F.col(f"{match_data_column}.{op['field_path']}"),
+                F.lit(0)
             )
-
-
-    return result_df
+        ).otherwise(0).alias(op["new_col"])
+        for op in operations
+    ]
+    
+    # Use try-except to handle schema mismatches
+    try:
+        return df.select(*select_exprs)
+    except Exception as e:
+        print(f"Schema issue detected: {str(e)}")
+        # Fallback: Add columns one by one with error handling
+        result_df = df
+        for op in operations:
+            try:
+                result_df = result_df.withColumn(
+                    op["new_col"],
+                    F.when(
+                        op["condition"],
+                        F.coalesce(
+                            F.col(f"{match_data_column}.{op['field_path']}"),
+                            F.lit(0)
+                        )
+                    ).otherwise(0)
+                )
+            except:
+                # If field doesn't exist at all, just create column with 0
+                print(f"Field {op['field_path']} not found, creating column with default 0")
+                result_df = result_df.withColumn(
+                    op["new_col"],
+                    F.when(op["condition"], F.lit(0)).otherwise(0)
+                )
+        return result_df
 
 
 def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granularity="champion_x_role", single_user_puuid = None): # Add granularity input
@@ -601,7 +614,9 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
     intermediate_df = (
         merged_df
         .withColumn("total_games_per_champion", F.count("*").over(window))
+        .withColumn("fully_stacked_mejais", F.when(F.col("challenges.mejais_full_stack_in_time") > 0, 1).otherwise(0))
         .groupBy(*grouping)
+        # moreEnemyJungleThanOpponent -> As a jungler, before 10 minutes, take more of the opponent's jungle than them
         .agg(
             F.count("*").alias("total_games_played_in_role"),
             F.first("total_games_per_champion").alias("total_games_per_champion"), # Used for filtering minimum games in role
@@ -695,13 +710,13 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("challenges.quick_solo_kills").alias("avg_quick_solo_kills"),
             F.avg("challenges.solo_kills").alias("avg_solo_kills"),
             F.avg("challenges.takedowns_after_gaining_level_advantage").alias("avg_takedowns_after_gaining_lvl_advantage"),
-            F.avg("challenges.kills_on_other_lanes_early_jungle_as_laner").alias("avg_kills_on_other_lanes_early_as_laner"),
+            F.avg("challenges.kills_on_other_lanes_early_jungle_as_laner").alias("avg_kills_on_other_lanes_early_as_laner"), # As a laner, in a single game, get kills before 10 minutes outside your lane (anyone but your lane opponent)
             F.avg("challenges.save_ally_from_death").alias("avg_times_save_ally_from_death"),
             F.avg("challenges.takedowns_in_alcove").alias("avg_takedowns_in_alcove"),
                 # First blood and early kills
             F.avg(F.col("first_blood_kill").cast("int") * 100).alias("pct_of_games_first_blood_kill"),
             F.avg(F.col("first_blood_assist").cast("int") * 100).alias("pct_of_games_first_blood_assist"),
-            F.avg("challenges.takedowns_before_jungle_minion_spawn").alias("avg_takedowns_before_jungle_camps_spawn"),
+            F.avg("challenges.takedowns_before_jungle_minion_spawn").alias("avg_takedowns_before_jungle_camps_spawn"), # Get takedowns on enemy champions before jungle camps spawn (1:30)
             F.avg("challenges.takedowns_first_x_minutes").alias("avg_first_takedown_time"),
 
             # Summoner Spells
@@ -718,8 +733,8 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("bounty_level").alias("avg_bounty_lvl"),
             F.avg("challenges.bounty_gold").alias("avg_bounty_gold"),
                 # Laning Specific   
-            F.avg(F.col("challenges.early_laning_phase_gold_exp_advantage") * 100).alias("pct_of_games_with_early_lane_phase_gold_exp_adv"), # DATA VALIDATION: Seems to only give "1" to a single player per match
-            F.avg(F.col("challenges.laning_phase_gold_exp_advantage") * 100).alias("pct_of_games_with_lanephase_gold_exp_adv"), # DATA VALIDATION: Seems to only give "1" to a single player per match, also check if repeat of above
+            F.avg(F.col("challenges.early_laning_phase_gold_exp_advantage") * 100).alias("pct_of_games_with_early_lane_phase_gold_exp_adv"), # Seems to only give "1" to a single player per match: End the early laning phase (7 minutes) with 20% more gold and experience than your role opponent on Summoner's
+            F.avg(F.col("challenges.laning_phase_gold_exp_advantage") * 100).alias("pct_of_games_with_lanephase_gold_exp_adv"), # End the laning phase (14 minutes) with 20% more gold and experience than your role opponent 
             F.avg("challenges.max_level_lead_lane_opponent").alias("avg_max_level_lead_over_lane_opp"),
                 # Minions Specific
             F.avg("total_minions_killed").alias("avg_minions_killed"),
@@ -741,6 +756,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
                 # Jungle farm
             F.avg("total_ally_jungle_minions_killed").alias("avg_ally_jungle_minions_killed"), # Don'ty necessarily add up to total CS (might be counting a buff as 1 cs for example), use as standalone jungle farm distribution stat (ally jg vs invade, etc)
             F.avg("total_enemy_jungle_minions_killed").alias("avg_enemy_jungle_minions_killed"),
+            F.avg("more_enemy_jungle_cs_than_opponent_as_jungler").alias("avg_enemy_jungle_cs_differential_early"), # As a jungler, before 10 minutes, take more of the opponent's jungle than them
             F.avg("neutral_minions_killed").alias("avg_jungle_monsters_cs"), # Jungle monsters/farm - note that this shows for all players
             F.avg("challenges.buffs_stolen").alias("avg_buffs_stolen"),
             F.avg("challenges.initial_buff_count").alias("avg_initial_buff_count"), # Decided not to add NULLs to non junglers for now
@@ -749,10 +765,10 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("challenges.scuttle_crab_kills").alias("avg_crabs_per_game"),
             F.avg("challenges.jungle_cs_before10_minutes").alias("avg_jg_cs_before_10m"), # Decided not to add NULLs to non junglers for now
                 # Jungle Combat
-            F.avg("challenges.jungler_kills_early_jungle").alias("avg_jungler_kills_early_jungle"), # DATA VALIDATION: what is this
-            F.avg("challenges.kills_on_laners_early_jungle_as_jungler").alias("avg_jungler_early_kills_on_laners"), # DATA VALIDATION: what is this
-            F.avg("challenges.get_takedowns_in_all_lanes_early_jungle_as_laner").alias("avg_times_had_early_takedowns_in_all_lanes_as_laner"), # DATA VALIDATION: CHECK what this is and if it is actually boolean
-            F.avg("challenges.jungler_takedowns_near_damaged_epic_monster").alias("avg_jungler_takedowns_near_damaged_epic_monsters"),
+            F.avg("jungler_kills_early_jungle").alias("avg_jungler_kills_early_jungle"), # As a jungler, get kills on the enemy jungler in their own jungle before 10 minutes
+            F.avg("kills_on_laners_early_jungle_as_jungler").alias("avg_jungler_early_kills_on_laners"), # As a jungler, get kills on top lane, mid lane, bot lane, or support players before 10 minutes
+            F.avg("challenges.get_takedowns_in_all_lanes_early_jungle_as_laner").alias("avg_times_had_early_takedowns_in_all_lanes_as_laner"), # As a laner, get a takedown in all three lanes within 10 minutes
+            F.avg("challenges.jungler_takedowns_near_damaged_epic_monster").alias("avg_jungler_takedowns_near_damaged_epic_monsters"), # Take down junglers near a damaged Epic Monster before it is killed. Epic Monsters include Dragons, the Rift Herald, and Baron Nashor.
             F.avg("challenges.kills_with_help_from_epic_monster").alias("avg_kills_with_help_from_epic_monster"),
 
             # Vision Stats
@@ -820,7 +836,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("turret_kills").alias("avg_individual_tower_kills"),
             F.avg("turret_takedowns").alias("avg_individual_tower_takedowns"),
             F.avg("challenges.turret_takedowns").alias("avg_individual_tower_takedowns2"), # DATA VALIDATION: Compare with above
-            F.avg("challenges.solo_turrets_lategame").alias("avg_individual_solo_towers_kills_late_game"),
+            F.avg("challenges.solo_turrets_lategame").alias("avg_individual_solo_towers_kills_late_game"), # Destroy side lane turrets solo (majority damage dealt by you) after 14 minutes without dying
             F.avg("challenges.turrets_taken_with_rift_herald").alias("avg_indiv_towers_taken_w_rift_herald"),
             F.avg("challenges.multi_turret_rift_herald_count").alias("avg_indiv_multi_towers_taken_w_rift_herald"),
                 # Inhibitor and nexus kills/takedowns + misc
@@ -844,8 +860,8 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("objectives_stolen").alias("avg_objectives_stolen"),
             F.avg("objectives_stolen_assists").alias("avg_objectives_stolen_assists"),
             F.avg("challenges.epic_monster_steals").alias("avg_epic_monster_steals"), # DATA VALIDATION: Check if duplicate of the one above
-            F.avg("challenges.epic_monster_stolen_without_smite").alias("avg_epic_monster_steals_without_smite"),
-            F.avg("challenges.epic_monster_kills_near_enemy_jungler").alias("avg_epic_monsters_killed_near_enemy_jgler"),
+            F.avg("challenges.epic_monster_stolen_without_smite").alias("avg_epic_monster_steals_without_smite"), # Steal an Epic jungle monster without using Summoner Smite. Epic Monsters include Dragons, the Rift Herald, and Baron Nashor. 
+            F.avg("challenges.epic_monster_kills_near_enemy_jungler").alias("avg_epic_monsters_killed_near_enemy_jgler"), # Secure Epic Monsters with the enemy jungler nearby. Epic Monsters include Dragons, the Rift Herald, and Baron Nashor.
                 # Earliest dragon takedown stats (used for derived stats)
             F.avg("challenges.earliest_dragon_takedown").alias("avg_earliest_drag_takedown"),
             F.avg(F.col("had_dragon_takedown") * 100).alias("pct_of_games_had_drag_takedown"),
@@ -888,7 +904,13 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg(F.col("challenges.danced_with_rift_herald") * 100).alias("pct_of_games_danced_with_rift_herald"),
             F.avg("challenges.double_aces").alias("avg_double_aces"),
             F.avg("challenges.fist_bump_participation").alias("avg_fist_bump_participations"),
-            F.avg("challenges.mejais_full_stack_in_time").alias("avg_mejai_full_stack_time"), # DATA VALIDATION: is this a Boolean? Is this time?
+            F.avg("fully_stacked_mejais").alias("percent_of_games_with_fully_stacked_mejais"),
+            
+            F.avg(
+                F.when(F.col("challenges.mejais_full_stack_in_time") != 0,
+                       F.col("challenges.mejais_full_stack_in_time") != 0).cast("int")
+            ).alias("avg_mejai_full_stack_time"),
+
             F.avg("challenges.outer_turret_executes_before10_minutes").alias("avg_outer_turret_executes_before_10m"),
             F.avg("challenges.takedowns_in_enemy_fountain").alias("avg_takedowns_in_enemy_fountain"),
 
@@ -1002,7 +1024,7 @@ def main_aggregator(
         spark
     )
 
-    participants_df = filter_position_specific_metrics(participants_df)
+    participants_df = extract_fields_with_exclusions(participants_df)
 
     merged_df = participants_df.join(
         teams_df.drop("win"), # Remove column that appears in both DataFrames

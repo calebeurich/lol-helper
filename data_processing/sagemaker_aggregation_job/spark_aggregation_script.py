@@ -3,6 +3,8 @@ from spark_champion_aggregation import main_aggregator
 
 import argparse
 
+PATCH = "15_6"
+
 if __name__ == "__main__":
     # Use --input-path and --output-path from CLI
     parser = argparse.ArgumentParser()
@@ -30,8 +32,8 @@ if __name__ == "__main__":
     print(f"Aggregation completed; writing output as csv to {args.output_path}")
 
     # Create a subdirectory that Spark can manage
-    champion_x_role_output_path = f"file://{args.output_path}/champion_x_role_output"
-    champion_x_role_x_user_output_path = f"file://{args.output_path}/champion_x_role_x_user_output"
+    champion_x_role_output_path = f"file://{args.output_path}/champion_x_role/patch_{PATCH}"
+    champion_x_role_x_user_output_path = f"file://{args.output_path}/champion_x_role_x_user/patch_{PATCH}"
     print(f"Writing to: {champion_x_role_output_path}")
     print(f"Writing to: {champion_x_role_x_user_output_path}")
 

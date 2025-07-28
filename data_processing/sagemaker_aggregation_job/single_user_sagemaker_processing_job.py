@@ -8,9 +8,9 @@ import boto3, os, sagemaker
 load_dotenv()
 REGION = os.getenv("REGION")
 ROLE = os.getenv("ROLE")
-INPUT_PATH = os.getenv("SINGLE_USER_RAW_DATA_PATH")
-OUTPUT_PATH = os.getenv("SINGLE_USER_PROCESSED_DATA_PATH")
-DATA_MAPPING_PATH = os.getenv("DATA_MAPPING_PATH")
+INPUT_PATH = os.getenv("SINGLE_USER_RAW_DATA")
+OUTPUT_PATH = os.getenv("SINGLE_USER_PROCESSED")
+DATA_MAPPING_PATH = os.getenv("DATA_MAPPING_FILE")
 
 session = sagemaker.Session(boto3.Session(region_name=REGION))
 
