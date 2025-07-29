@@ -710,7 +710,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("challenges.quick_solo_kills").alias("avg_quick_solo_kills"),
             F.avg("challenges.solo_kills").alias("avg_solo_kills"),
             F.avg("challenges.takedowns_after_gaining_level_advantage").alias("avg_takedowns_after_gaining_lvl_advantage"),
-            F.avg("challenges.kills_on_other_lanes_early_jungle_as_laner").alias("avg_kills_on_other_lanes_early_as_laner"), # As a laner, in a single game, get kills before 10 minutes outside your lane (anyone but your lane opponent)
+            F.avg("kills_on_other_lanes_early_as_laner").alias("avg_kills_on_other_lanes_early_as_laner"), # As a laner, in a single game, get kills before 10 minutes outside your lane (anyone but your lane opponent)
             F.avg("challenges.save_ally_from_death").alias("avg_times_save_ally_from_death"),
             F.avg("challenges.takedowns_in_alcove").alias("avg_takedowns_in_alcove"),
                 # First blood and early kills
@@ -767,10 +767,10 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
                 # Jungle Combat
             F.avg("jungler_kills_early_jungle").alias("avg_jungler_kills_early_jungle"), # As a jungler, get kills on the enemy jungler in their own jungle before 10 minutes
             F.avg("kills_on_laners_early_jungle_as_jungler").alias("avg_jungler_early_kills_on_laners"), # As a jungler, get kills on top lane, mid lane, bot lane, or support players before 10 minutes
-            F.avg("challenges.get_takedowns_in_all_lanes_early_jungle_as_laner").alias("avg_times_had_early_takedowns_in_all_lanes_as_laner"), # As a laner, get a takedown in all three lanes within 10 minutes
+            F.avg("takedowns_in_all_lanes_early_as_laner").alias("avg_times_had_early_takedowns_in_all_lanes_as_laner"), # As a laner, get a takedown in all three lanes within 10 minutes
             F.avg("challenges.jungler_takedowns_near_damaged_epic_monster").alias("avg_jungler_takedowns_near_damaged_epic_monsters"), # Take down junglers near a damaged Epic Monster before it is killed. Epic Monsters include Dragons, the Rift Herald, and Baron Nashor.
             F.avg("challenges.kills_with_help_from_epic_monster").alias("avg_kills_with_help_from_epic_monster"),
-
+            
             # Vision Stats
                 # Vision score and wards placed + unseen recalls
             F.avg("vision_score").alias("avg_vision_score"),
