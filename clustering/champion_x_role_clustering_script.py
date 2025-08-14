@@ -382,6 +382,37 @@ def filter_role_data(
     return role_df
 
 
+def strengths_weaknesses_wide(df: pd.DataFrame, k: int = 10) -> pd.DataFrame:
+    # use only numeric feature columns
+    feats = df.select_dtypes(include=[np.number])
+
+    def row_top_low(s: pd.Series) -> pd.Series:
+        top = s.nlargest(k)
+        low = s.nsmallest(k)
+
+        out = {}
+        # strengths (interleaved name/value)
+        for i, (f, v) in enumerate(top.items(), start=1):
+            out[f"strength_{i}_name"]  = f
+            out[f"strength_{i}_value"] = float(v)
+        # weaknesses (interleaved name/value)
+        for i, (f, v) in enumerate(low.items(), start=1):
+            out[f"weakness_{i}_name"]  = f
+            out[f"weakness_{i}_value"] = float(v)
+        return pd.Series(out)
+
+    result = feats.apply(row_top_low, axis=1)
+    result.index = df.index  # keep your (champion, role) index
+
+    # ensure exact column order: strength_1_name, strength_1_value, ..., weakness_10_value
+    cols = []
+    for i in range(1, k+1):
+        cols += [f"strength_{i}_name",  f"strength_{i}_value"]
+    for i in range(1, k+1):
+        cols += [f"weakness_{i}_name", f"weakness_{i}_value"]
+    return result.reindex(columns=cols)
+
+
 def cluster_and_vectors(df: pd.DataFrame, n_clusters: int = 8, random_state: int = 42):
     """
     Runs KMeans on all non-label columns, assigns clusters,
@@ -406,14 +437,18 @@ def cluster_and_vectors(df: pd.DataFrame, n_clusters: int = 8, random_state: int
     labels   = km.fit_predict(X_scaled)
 
     # 2) champion/member vectors (scaled)
-    member_vec_df = pd.DataFrame(X_scaled, columns=feature_cols)
-    member_vec_df.insert(0, "cluster", labels)
-    member_vec_df.index = pd.MultiIndex.from_frame(df[label_cols])  # champion + role index
+    champions_vec_df = pd.DataFrame(X_scaled, columns=feature_cols)
+    champions_vec_df.insert(0, "cluster", labels)
+    champions_vec_df.index = pd.MultiIndex.from_frame(df[label_cols])  # champion + role index
 
     # 3) cluster centroid vectors (scaled)
+    # Consider also including measures of "uniqueness/importance" in future (what this cluster does differently)
     centroids_scaled = km.cluster_centers_                             # shape (k, n_features)
+    #importance    = np.ptp(centroids_scaled, axis=0)            # peak-to-peak per feature
     cluster_vec_df   = pd.DataFrame(centroids_scaled, columns=feature_cols)
     cluster_vec_df.index.name = "cluster"
+    
+    cluster_strengths_weaknesses_df = strengths_weaknesses_wide(cluster_vec_df, k=10)
 
     # 4) residual vector & distance (scaled)
     assigned_centers = centroids_scaled[labels]                        # (n_samples, n_features)
@@ -421,18 +456,20 @@ def cluster_and_vectors(df: pd.DataFrame, n_clusters: int = 8, random_state: int
     distances        = np.linalg.norm(residuals, axis=1)               # Euclidean distance
 
     # Attach residual & distance to member table
-    member_vec_df.insert(1, "euclidean_distance_to_centroid", distances)
-    # Keep the full residual vector per member as a list; round to shrink size
-    member_vec_df.insert(2, "residual_vec_scaled", [np.round(r, 4).tolist() for r in residuals])
+    champions_residuals_df = pd.DataFrame([np.round(r, 3).tolist() for r in residuals], index = champions_vec_df.index, columns = feature_cols)
+    champions_residuals_df = strengths_weaknesses_wide(champions_residuals_df, k=10)
+    champions_residuals_df.insert(0, "cluster", labels)
 
-    # Return scaler to convert back into original units later for LLM context if needed
-    return member_vec_df, cluster_vec_df, scaler
+    # Merge both dfs and return
+    #role_vectors_df = pd.merge(champions_vec_df.reset_index(), cluster_vec_df, "left", "cluster").set_index(label_cols)
+
+    return cluster_strengths_weaknesses_df, champions_residuals_df, champions_vec_df, cluster_vec_df, scaler
 
 
-def save_latest_s3fs(member_df, cluster_df, role):
+def save_latest_s3fs(cluster_strengths_weaknesses_df, champions_residuals_df, role):
     prefix = f"s3://{BUCKET}/{PROCESSED_DATA_FOLDER}/clusters/{PATCH}"
-    member_df.to_csv(f"{prefix}/{role.lower()}_member_vectors.csv", index=True)
-    cluster_df.to_csv(f"{prefix}/{role.lower()}_cluster_vectors.csv", index=True)
+    cluster_strengths_weaknesses_df.to_csv(f"{prefix}/{role.lower()}_clusters_df.csv", index=True)
+    champions_residuals_df.to_csv(f"{prefix}/{role.lower()}_champion_residuals_df.csv", index=True)
 
 
 def main():
@@ -442,8 +479,8 @@ def main():
 
     for role, config in ROLE_CONFIG.items():
         filtered_role_df = filter_role_data(champion_x_role_df, role, labels, raw_clustering_features, derived_clustering_features, config['exclude_features'])
-        member_vec_df, cluster_vec_df, scaler = cluster_and_vectors(filtered_role_df, config["number_of_clusters"])
-        save_latest_s3fs(member_vec_df, cluster_vec_df, role)
+        cluster_strengths_weaknesses_df, champions_residuals_df, champions_vec_df, cluster_vec_df, scaler = cluster_and_vectors(filtered_role_df, config["number_of_clusters"])
+        save_latest_s3fs(cluster_strengths_weaknesses_df, champions_residuals_df, role)
 
 if __name__ == "__main__":
     main()
