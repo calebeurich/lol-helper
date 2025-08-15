@@ -394,11 +394,11 @@ def strengths_weaknesses_wide(df: pd.DataFrame, k: int = 10) -> pd.DataFrame:
         # strengths (interleaved name/value)
         for i, (f, v) in enumerate(top.items(), start=1):
             out[f"strength_{i}_name"]  = f
-            out[f"strength_{i}_value"] = float(v)
+            out[f"strength_{i}_value"] = round(float(v), 3)
         # weaknesses (interleaved name/value)
         for i, (f, v) in enumerate(low.items(), start=1):
             out[f"weakness_{i}_name"]  = f
-            out[f"weakness_{i}_value"] = float(v)
+            out[f"weakness_{i}_value"] = round(float(v), 3)
         return pd.Series(out)
 
     result = feats.apply(row_top_low, axis=1)
