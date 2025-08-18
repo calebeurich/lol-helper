@@ -20,8 +20,8 @@ cfg = Config(read_timeout=120, retries={"max_attempts": 3, "mode": "adaptive"})
 rt  = boto3.client("bedrock-runtime", region_name=REGION, config=cfg)
 
 # Cost controls
-MAX_TOTAL_TOKENS_APPROX = 50_000        # rough budget; ~chars/4
-MAX_TOKENS_PER_CALL     = 120           # limit per batch response
+MAX_TOTAL_TOKENS_APPROX = 100_000        # rough budget; ~chars/4
+MAX_TOKENS_PER_CALL     = 1500           # limit per batch response
 BATCH_SIZE              = 12            # small batch to keep prompts compact
 MAX_TAGS                = 7
 MIN_TAGS                = 3
@@ -146,10 +146,14 @@ def run_labelling(
     champion_dfs: Dict[str, pd.DataFrame],
     max_total_tokens_approx: int = MAX_TOTAL_TOKENS_APPROX,
     batch_size: int = BATCH_SIZE,
+    desired_roles = "all" # If not all, input as list of roles desired to run
 ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
     client = bedrock_client()
-    #roles = ["TOP", "JUNGLE", "MID", "BOTTOM", "UTILITY"]
-    roles = ["JUNGLE"]
+
+    if desired_roles == "all":
+        roles = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]
+    else:
+        roles = desired_roles
 
     total_token_estimate = 0
     cluster_outputs: Dict[str, List[dict]] = {r: [] for r in roles}
@@ -214,20 +218,24 @@ def get_processed_dataframe(role: str, req_type: str) -> pd.DataFrame:
     return pd.read_csv(io.BytesIO(obj["Body"].read()))
 
 
-def main():
-    jungle_df = get_processed_dataframe("jungle", "clusters")
-    cluster_dfs = {"JUNGLE" : jungle_df}
-    
-    champion_jg_df = get_processed_dataframe("jungle", "champion_residuals")
-    champion_dfs = {"JUNGLE" : champion_jg_df}
+def main(roles: list):
 
-    cluster_dfs["JUNGLE"].to_csv("s3_cluster_test.csv")
-    champion_dfs["JUNGLE"].to_csv("s3_champion_test.csv")
+    for role in roles:
+    # Saving locally for now, to be streamlined with S3 uploading later
+        role_df = get_processed_dataframe(role.lower(), "clusters")
+        cluster_dfs = {role.upper() : role_df}
+        
+        champion_df = get_processed_dataframe(role.lower(), "champion_residuals")
+        champion_dfs = {role.upper() : champion_df}
 
-    test_cluster_results, test_champion_results = run_labelling(cluster_dfs, champion_dfs, max_total_tokens_approx = MAX_TOTAL_TOKENS_APPROX, batch_size= BATCH_SIZE)
-    
-    test_cluster_results["JUNGLE"].to_csv("test_jg_cluster_llm.csv")
-    test_champion_results["JUNGLE"].to_csv("test_jg_champion_llm.csv")
+        # Just for S3 file integrity checks and debugging
+        cluster_dfs[role.upper()].to_csv("s3_cluster_test.csv")
+        champion_dfs[role.upper()].to_csv("s3_champion_test.csv")
+
+        cluster_results, champion_results = run_labelling(cluster_dfs, champion_dfs, max_total_tokens_approx = MAX_TOTAL_TOKENS_APPROX, batch_size= BATCH_SIZE, desired_roles = [role])
+        
+        cluster_results[role.upper()].to_csv(f"{role.lower()}_cluster_semantic_tags_and_descriptions.csv")
+        champion_results[role.upper()].to_csv(f"{role.lower()}_champion_semantic_tags_and_descriptions.csv")
 
 if __name__ == "__main__":
-    main()
+    main(["UTILITY"])
