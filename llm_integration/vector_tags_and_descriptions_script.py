@@ -221,11 +221,6 @@ def main():
     champion_jg_df = get_processed_dataframe("jungle", "champion_residuals")
     champion_dfs = {"JUNGLE" : champion_jg_df}
 
-    print(cluster_dfs["JUNGLE"]["cluster"].tolist())
-    print(champion_dfs["JUNGLE"].index.tolist())
-
-    return
-
     cluster_dfs["JUNGLE"].to_csv("s3_cluster_test.csv")
     champion_dfs["JUNGLE"].to_csv("s3_champion_test.csv")
 
