@@ -8,7 +8,7 @@ import boto3, os, sagemaker
 load_dotenv()
 REGION = os.getenv("REGION")
 ROLE = os.getenv("ROLE")
-INPUT_PATH = os.getenv("CHAMPIONS_RAW_DATA")
+INPUT_PATH = os.getenv("SINGLE_USER_RAW_DATA")
 OUTPUT_PATH = os.getenv("PROCESSED_DATA_FOLDER")
 DATA_MAPPING_PATH = os.getenv("DATA_MAPPING_FILE")
 
@@ -18,7 +18,7 @@ spark_processor = PySparkProcessor(
     base_job_name             = "spark-champion-aggregation", # SageMaker job names need to be in kebab case
     framework_version         = "3.3",  
     role                      = ROLE,
-    instance_count            = 2,
+    instance_count            = 1,
     instance_type             = "ml.m5.xlarge",
     max_runtime_in_seconds    = 1800,
     sagemaker_session         = session,
@@ -43,19 +43,14 @@ spark_config = [{
 }]
 
 spark_processor.run(
-    submit_app      = "spark_aggregation_script.py",
+    submit_app      = "single_user_spark_aggregation_script.py",
     submit_py_files = ["spark_champion_aggregation.py"],
     arguments       = [
-        "--input-path", "/opt/ml/processing/input",
         "--output-path", "/opt/ml/processing/output",
         "--items-json-path", "/opt/ml/processing/config/item_id_tags.json"
     ],
     configuration=spark_config,
     inputs          = [
-        ProcessingInput(
-            source      = INPUT_PATH,
-            destination = "/opt/ml/processing/input"
-        ),
         ProcessingInput(
             source      = DATA_MAPPING_PATH,
             destination = "/opt/ml/processing/config"

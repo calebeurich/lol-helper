@@ -31,7 +31,7 @@ def safe_snake_json(s: str) -> str:
 
 snake_json = udf(safe_snake_json, StringType())
 
-if __name__ == "__main__":
+def format_to_snake():
     # stop any old session
     try: spark.stop()
     except: pass

@@ -23,7 +23,7 @@ if __name__ == "__main__":
     )
 
     # Hand SparkSession + folder‑prefix into aggregator
-    champion_x_role_df, champion_x_role_x_user_df = main_aggregator(
+    champion_x_role_df, champion_x_role_x_user_df, counter_stats_dfs_by_role = main_aggregator(
         spark, 
         args.input_path,
         args.items_json_path
@@ -34,6 +34,7 @@ if __name__ == "__main__":
     # Create a subdirectory that Spark can manage
     champion_x_role_output_path = f"{args.output_path}/champion_x_role/patch_{PATCH}"
     champion_x_role_x_user_output_path = f"{args.output_path}/champion_x_role_x_user/patch_{PATCH}"
+    counter_stats_output_path = f"{args.output_path}/counter_stats_dfs_by_role/patch_{PATCH}"
     
     print(f"Writing to: file://{champion_x_role_output_path}")
     print(f"Writing to: file://{champion_x_role_x_user_output_path}")
@@ -51,6 +52,14 @@ if __name__ == "__main__":
         .option("header", True)
         .mode("overwrite")
         .csv(f"file://{champion_x_role_x_user_output_path}"))
+    
+    for role, df in counter_stats_dfs_by_role.items():
+        (df
+            .coalesce(1)
+            .write
+            .option("header", True)
+            .mode("overwrite")
+            .csv(f"file://{counter_stats_output_path}/{role}"))
 
     print("Spark aggregation complete.")
 

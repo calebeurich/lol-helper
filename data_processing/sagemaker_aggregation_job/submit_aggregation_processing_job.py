@@ -8,7 +8,7 @@ import boto3, os, sagemaker
 load_dotenv()
 REGION = os.getenv("REGION")
 ROLE = os.getenv("ROLE")
-INPUT_PATH = os.getenv("SINGLE_USER_RAW_DATA")
+INPUT_PATH = os.getenv("CHAMPIONS_RAW_DATA")
 OUTPUT_PATH = os.getenv("PROCESSED_DATA_FOLDER")
 DATA_MAPPING_PATH = os.getenv("DATA_MAPPING_FILE")
 
@@ -18,9 +18,9 @@ spark_processor = PySparkProcessor(
     base_job_name             = "spark-champion-aggregation", # SageMaker job names need to be in kebab case
     framework_version         = "3.3",  
     role                      = ROLE,
-    instance_count            = 1,
-    instance_type             = "ml.m5.xlarge",
-    max_runtime_in_seconds    = 1800,
+    instance_count            = 4,
+    instance_type             = "ml.m5.2xlarge",
+    max_runtime_in_seconds    = 2000,
     sagemaker_session         = session,
     env                       = {"AWS_DEFAULT_REGION" : REGION},
     tags                      = [{"Key" : "UseSpotInstances", "Value" : "True"}],
@@ -29,21 +29,21 @@ spark_processor = PySparkProcessor(
 spark_config = [{
     "Classification": "spark-defaults",
     "Properties": {
-        "spark.executor.memory": "12g",
-        "spark.executor.cores": "4",
-        "spark.driver.memory": "10g",
-        "spark.executor.memoryOverhead": "2g",  # Explicit overhead
+        "spark.executor.memory": "20g",
+        "spark.executor.cores": "6",
+        "spark.driver.memory": "4g",
+        "spark.executor.memoryOverhead": "6g",  # Explicit overhead
         "spark.sql.adaptive.enabled": "true",
         "spark.sql.adaptive.coalescePartitions.enabled": "true",
-        "spark.sql.shuffle.partitions": "100",
+        "spark.sql.shuffle.partitions": "96",
         "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
         "spark.sql.execution.arrow.pyspark.enabled": "true",
-        "spark.default.parallelism": "100"  # Match shuffle partitions
+        "spark.default.parallelism": "96",  # Match shuffle partitions
     }
 }]
 
 spark_processor.run(
-    submit_app      = "single_user_spark_aggregation_script.py",
+    submit_app      = "spark_aggregation_script.py",
     submit_py_files = ["spark_champion_aggregation.py"],
     arguments       = [
         "--input-path", "/opt/ml/processing/input",

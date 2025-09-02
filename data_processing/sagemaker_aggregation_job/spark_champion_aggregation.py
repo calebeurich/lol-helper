@@ -1,8 +1,9 @@
-import os, json
+import re, json
 import boto3
 from typing import Dict, List, Set, Tuple, Any
 from urllib.parse import urlparse
 from pyspark.sql import SparkSession, DataFrame, Window
+from pyspark.sql.types import StringType
 from pyspark.sql import functions as F
 from enum import Enum
 
@@ -15,8 +16,7 @@ MATCH_DATA = "match_data"
 MATCH_ID = "match_id"
 TEAM_POSITION = "team_position"
 
-# Role specific metrics
-    # challenges.mejais_full_stack_in_time
+ALL_TEAM_POSITIONS = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]
 
 POSITION_SPECIFIC_METRICS = {
     "JUNGLE": {
@@ -63,6 +63,45 @@ SUMMONER_SPELLS_DICT = {
     "14" : "ignite",
     "21" : "barrier"
 }
+
+
+# — UDF definitions unchanged —
+def camel_to_snake(name: str) -> str:
+    s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
+    s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
+    return s2.lower()
+
+
+def rename_keys(obj):
+    if isinstance(obj, dict):
+        return { camel_to_snake(k): rename_keys(v) for k, v in obj.items() }
+    elif isinstance(obj, list):
+        return [rename_keys(x) for x in obj]
+    else:
+        return obj
+
+
+def safe_snake_json(s: str) -> str:
+    if not s or not s.strip():
+        return None
+    try:
+        parsed = json.loads(s)
+    except json.JSONDecodeError:
+        return None
+    return json.dumps(rename_keys(parsed))
+
+
+def format_df_to_snake(raw_df: DataFrame) -> DataFrame:
+
+    snake_json = F.udf(safe_snake_json, StringType())
+    # apply UDF + rename columns
+    snake_formatted_df = (
+        raw_df
+            .withColumn("match_data", snake_json(F.col("match_data")))
+    )
+
+    return snake_formatted_df
+
 
 def explode_and_flatten_struct(
         all_matches_df: DataFrame,
@@ -148,9 +187,10 @@ def explode_and_flatten_struct(
 
 def create_matches_df(
     spark: SparkSession,
-    csv_file_path: str,
+    csv_file_path_or_user_df: str,
     npartitions: int = DEFAULT_PARTITIONS,
-    queue_id: int = 420 
+    queue_id: int = 420,
+    single_user_flag = False
 ) -> Tuple[DataFrame, DataFrame]:
     """
     Load and process match data from CSV containing JSON strings into structured DataFrames.
@@ -220,24 +260,32 @@ def create_matches_df(
     """
 
     # ========== Extract df From All CSV Files ==========
-    raw_csv_df = (
-        spark.read
-             .option("header", True)
-             .option("multiLine", True)
-             .option("escape", "\"")
-             .option("quote", "\"")
-             .csv(f"file://{csv_file_path}/*.csv")
-    )
+    if not single_user_flag:
+        raw_df = (
+            spark.read
+                .option("header", True)
+                .option("multiLine", True)
+                .option("escape", "\"")
+                .option("quote", "\"")
+                .csv(f"file://{csv_file_path_or_user_df}/*.csv")
+        )
+        sampling_ratio = 0.2
+    else:
+        raw_df = csv_file_path_or_user_df
+        sampling_ratio = 1
 
     # ========== Filtering by Current Patch ==========
     # Drop "Patch Error" rows, repartition & cache
     filtered_by_patch_df = (
-        raw_csv_df
+        raw_df
             .filter(F.col(MATCH_DATA).isNotNull())
             .filter(~F.col(MATCH_DATA).rlike(PATCH_ERROR_PATTERN))
             .repartition(npartitions)
             .cache()
     )
+
+    # ========== Format DataFrame from camel to snake case ==========
+    filtered_by_patch_df = format_df_to_snake(filtered_by_patch_df)
 
     # ========== Full JSON Schema Inference ==========
     # Build an RDD[String] of all the match_data JSON texts
@@ -249,11 +297,12 @@ def create_matches_df(
         .rdd
         .map(lambda r: r[MATCH_DATA])
         )
+    
     # Have Spark read *all* of it as JSON, sampling 100%, so it can build a complete schema
     inferred_schema = (
         spark.read
              .option("multiLine", True)
-             .option("samplingRatio", 0.2)
+             .option("samplingRatio", sampling_ratio)
              .json(json_rdd)
              .schema
     )
@@ -268,10 +317,12 @@ def create_matches_df(
 
     # ========== Filtering Distinct Ranked Games ==========
     # Keep only queueId == 420 (i.e. ranked games), then drop duplicates on matchId
-    ranked_matches_df = (
-        parsed_struct_df.filter(F.col(f"{MATCH_DATA}_struct.info.queue_id") == queue_id)
-           .dropDuplicates(["match_id"])
-    )
+    if queue_id == 420:
+        ranked_matches_df = (
+            parsed_struct_df.filter(F.col(f"{MATCH_DATA}_struct.info.queue_id") == queue_id)
+        )
+
+    ranked_matches_df = ranked_matches_df.dropDuplicates(["match_id"])
 
     participants_df = explode_and_flatten_struct(ranked_matches_df, "participants")
     participants_df = participants_df.filter(
@@ -548,7 +599,7 @@ def extract_fields_with_exclusions(
     
     for new_col, field_path in laner_specific_fields.items():
         for position in non_jungle_positions:
-            position_col_name = f"{position.lower()}_{new_col}"
+            position_col_name = new_col
             operations.append({
                 "new_col": position_col_name,
                 "condition": F.col(position_column) == position,
@@ -927,9 +978,9 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
                 F.collect_list("role")
             )[0].alias("mode_role"),
 
-            F.sort_array(
-                F.collect_list("team_position")
-            )[0].alias("mode_team_position"),
+            #F.sort_array(
+                #F.collect_list("team_position")
+            #)[0].alias("mode_team_position"),
 
             # CONSIDER EXPLORATORY FEATURE ANALYSIS TO EVALUATE
 
@@ -996,6 +1047,59 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
     return final_df
         
 
+def derive_counter_stats(
+        raw_counter_stats_df: DataFrame, desired_team_positions: list = ALL_TEAM_POSITIONS, min_games: int = 10
+) -> dict[str, DataFrame]:
+        
+    counter_stats_dfs_by_role = {}
+
+    for role in desired_team_positions:
+
+        role_filtered_df = (raw_counter_stats_df
+                            .filter(F.col("team_position") == F.lit(role))
+                            .select("match_id", "team_id", "champion_name", "win")
+                            .dropDuplicates(["match_id","team_id","champion_name"]))
+
+        if not role_filtered_df.take(1):
+            raise ValueError(f"No rows found for team_position={role}")
+
+        role_filtered_df = role_filtered_df.withColumn("win", F.col("win").cast("int"))
+
+        # Self-join by match to pair opponents
+        a = role_filtered_df.alias("a")
+        b = (role_filtered_df
+                .select(
+                    F.col("match_id"),
+                    F.col("team_id").alias("opp_team_id"),
+                    F.col("champion_name").alias("opp_champion_name")
+                )
+                .alias("b"))
+        
+        pairs = (
+            a.join(b, on="match_id", how="inner")
+            .where(F.col("a.team_id") != F.col("b.opp_team_id")) 
+        )
+
+        # Aggregate to wins/games for champion and opponent
+        agg = (pairs.groupBy(
+                            F.col("a.champion_name").alias("champion_name"),
+                            F.col("b.opp_champion_name").alias("opp_champion_name"))
+                    .agg(F.count(F.lit(1)).alias("number_of_games"),
+                         F.sum(F.col("a.win")).alias("wins"))
+        )
+    
+        agg = agg.withColumn(
+            "win_rate",
+            F.when(F.col("number_of_games") >= F.lit(min_games),
+                   (F.col("wins").cast("double") / F.col("number_of_games")) * F.lit(100.00)
+            ).otherwise(F.lit(None).cast("double"))
+        )
+
+        counter_stats_dfs_by_role[role] = agg.select("champion_name", "opp_champion_name",
+                                                  "number_of_games", "wins", "win_rate")
+
+    return counter_stats_dfs_by_role
+
 
 """
 Main aggregating functions, uses helpers as needed, idea is to pull all wanted keys from match_data struct into columns (some keys will be modified, derived)
@@ -1003,13 +1107,19 @@ Finally, match_data will be dropped
 """
 def main_aggregator(
     spark: SparkSession,
-    csv_file_path: str,
+    csv_file_path_or_user_df: str,
     items_json_path: str,
     single_user_flag: bool = False,
-    single_user_puuid: str = None
+    single_user_puuid: str = None,
+    desired_queue_id: int = 420
 ) -> DataFrame:
-    participants_df, teams_df = create_matches_df(spark, csv_file_path)
     
+    participants_df, teams_df = create_matches_df(
+        spark=spark, csv_file_path_or_user_df=csv_file_path_or_user_df,
+        npartitions=DEFAULT_PARTITIONS, queue_id=desired_queue_id, 
+        single_user_flag=single_user_flag
+    )
+
     # Create an indicator column for games where champion had a dragon takedown, and subsequent columns with the timing of first dragon takedown
     participants_df = derive_participant_dragon_stats(participants_df)
 
@@ -1043,7 +1153,11 @@ def main_aggregator(
 
         return single_user_df
 
-    else:    
+    else:
+        counter_stats_cols = ["match_id", "team_position", "champion_name", "win", "team_id"]
+        raw_counter_stats_df = merged_df[counter_stats_cols].drop_duplicates(subset=counter_stats_cols)
+        counter_stats_dfs_by_role = derive_counter_stats(raw_counter_stats_df)
+
         champion_x_role_df = aggregate_champion_data(
             merged_df, 
             all_item_tags, 
@@ -1057,4 +1171,4 @@ def main_aggregator(
             granularity="champion_x_role_x_user"
         )
 
-        return champion_x_role_df, champion_x_role_x_user_df
+        return champion_x_role_df, champion_x_role_x_user_df, counter_stats_dfs_by_role
