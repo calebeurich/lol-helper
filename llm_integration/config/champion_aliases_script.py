@@ -5,6 +5,7 @@ from typing import Dict, Set, Any
 import requests
 from bs4 import BeautifulSoup
 
+# Switch into main aggregation pipeline, so champion aliases are compiled with it
 
 # -------- Fetch champion names by parsing League of Legends official website --------
 def fetch_from_official():
@@ -74,7 +75,7 @@ def variants_for(name):
     variants = set()
 
     cleaned_with_apostrophes = keep_apostrophes(name)   # e.g. kha'zix
-    cleaned_without_apostrophes = remove_apostrophes(name)     # e.g. khazix
+    cleaned_without_apostrophes = remove_apostrophes(name)     # e.g. khazixs
 
     # Include cleaned variant without apostrophes or spaces
     variants.add(cleaned_without_apostrophes)                   # "khazix"

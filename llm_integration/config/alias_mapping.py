@@ -1,7 +1,7 @@
 ROLES = {
     "top":"top",
 
-    "jungle":"jungle", "jung":"jungle","jgl":"jungle",
+    "jungle":"jungle", "jg":"jungle", "jung":"jungle","jgl":"jungle",
 
     "middle":"middle","mid":"middle", 
 
@@ -11,10 +11,20 @@ ROLES = {
     "support":"utility", "supp":"utility", "sup":"utility"
 }
 
-QUEUES = {"ranked", "draft", "both"}
+BINARY_REPLIES = {
+    "yes": True, "y": True,
+    "no": False, "n":False
+}
+
+QUEUES = {
+    "ranked":"ranked", "rank":"ranked", "rankd":"ranked",
+    "draft":"draft", "norm":"draft", "norms":"draft", "normal":"draft",
+    "both":"both"
+}
 
 CHAMPION_CRITERIA = {
     "win_rate": "win_rate", "win rate": "win_rate", "winrate": "win_rate", "wr": "win_rate", "win": "win_rate",
     "play rate": "play_rate", "playrate": "play_rate", "play": "play_rate",
     "choose one": "user_choice", "choose": "user_choice", "chooseone": "user_choice", "choice": "user_choice"
 }
+

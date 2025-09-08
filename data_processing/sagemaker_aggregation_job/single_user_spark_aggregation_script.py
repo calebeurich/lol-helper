@@ -7,8 +7,6 @@ import time, json, argparse, os, glob, requests, sys, gc
 
 # Load environment variables and set up
 load_dotenv()
-TEST_USER_GAME_NAME = "zak"
-TEST_USER_TAG = "vvv"
 
 PATCH = "15_6"
 
@@ -25,6 +23,9 @@ REQUEST_TIMEOUT = 10
 CURRENT_PATCH = "15.6"
 PATCH_START_TIME = "1742342400" # March 19th, 2025 in timestamp seconds
 PATCH_END_TIME = "1743552000" # APRIL 4TH, 2025 in timestamp
+
+class QueueTypeError(Exception):
+    """Incorrect queue type input."""
 
 def handle_rate_limit(api_calls: int, start_time: float, buffer: int = 5) -> tuple[int, float]:
     """Handle Riot API rate limiting"""
@@ -64,13 +65,17 @@ def get_match_ids(
     patch_start_time: str = PATCH_START_TIME, 
     patch_end_time: str = PATCH_END_TIME, 
     matches_per_summoner: int = 100,
-    queue_type: str = "ranked"
+    user_queue_type: str = "ranked"
 ) -> pd.DataFrame:
 
-    if queue_type == "ranked":
+    if user_queue_type == "ranked":
         api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=420&start=0&count={matches_per_summoner}"
-    else: # Alternative is to process all matches, can be easily tuned to accept different queue types (ARAM, etc)
+    elif user_queue_type == "draft":
+        api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=400&start=0&count={matches_per_summoner}"
+    elif user_queue_type == "both": # Alternative is to process all matches, can be easily tuned to accept different queue types (ARAM, etc)
         api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&start=0&count={matches_per_summoner}"
+    else:
+        raise QueueTypeError
 
     api_calls = 0
     start_time = time.time()
@@ -97,7 +102,7 @@ def get_match_ids(
     if match_history:
         match_history_df = pd.DataFrame({
             "puuid": puuid,
-            "match_id": match_history
+            "matchId": match_history
         })
     
     else:
@@ -143,10 +148,14 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str, spark: Sp
 def main():
     parser = argparse.ArgumentParser()
     #parser.add_argument("--input-path",  type=str, required=True)
+    parser.add_argument("--user_name", type=str, required=True)
+    parser.add_argument("--user_tag_line", type=str, required=True)
+    parser.add_argument("--user_queue_type", type=str, required=True)
     parser.add_argument("--output-path", type=str, required=True)
     parser.add_argument("--items-json-path", type=str, required=True)
     args = parser.parse_args()
-
+    user_name, user_tag_line, user_queue_type = args.user_name, args.user_tag_line, args.user_queue_type
+    
     print(f"Starting Spark job")
 
     spark = (
@@ -155,16 +164,12 @@ def main():
             .getOrCreate()
     )
 
-    # Placeholder to include code that pulls user input from frontend
-    user_name = TEST_USER_GAME_NAME
-    user_tag_line = TEST_USER_TAG
-
     user_puuid = get_puuid(user_name, user_tag_line)
     print(user_puuid)
 
     user_match_history_df = get_match_ids(
         puuid=user_puuid, patch_start_time=PATCH_START_TIME, 
-        patch_end_time=PATCH_END_TIME, matches_per_summoner=100, queue_type="ranked"
+        patch_end_time=PATCH_END_TIME, matches_per_summoner=100, user_queue_type=user_queue_type
     )
 
     user_match_data_df = get_match_data(match_history_df=user_match_history_df, current_patch=CURRENT_PATCH, spark=spark)

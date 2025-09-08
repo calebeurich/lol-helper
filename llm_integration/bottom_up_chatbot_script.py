@@ -8,8 +8,9 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_aws import ChatBedrock  # or langchain_openai.ChatOpenAI, etc.
 from dotenv import load_dotenv
+from data_processing.sagemaker_aggregation_job.submit_user_data_processing_job import submit_user_processing_job
 
-from config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA
+from llm_integration.config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
 
 # ============================================================
 # Environment setup and Literals/Types
@@ -39,7 +40,7 @@ def call_llm(prompt: str) -> str:
     resp = bedrock.converse(
         modelId=MODEL_ID,
         messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"maxTokens": 100, "temperature": 0.1},
+        inferenceConfig={"maxTokens": 100, "temperature": 0},
     )
     # Extract plain text from output blocks
     blocks = resp.get("output", {}).get("message", {}).get("content", [])
@@ -48,14 +49,21 @@ def call_llm(prompt: str) -> str:
 
 
 # ============================================================
-# Defining shape of state and LLM interaction helper function
+# Defining shape of state and LLM interaction helper functions
 # ============================================================
 class State(TypedDict, total=False):
     role: Optional[str]
     use_own_data: Optional[bool]
-    queue_type: Optional[str]
+    user_queue_type: Optional[str]
+    user_name: Optional[str]
+    user_tag_line: Optional[str]
     champion_criteria: Optional[str]
     user_champion: Optional[str]
+
+
+class RetryLimitExceeded(Exception):
+    """User failed validation too many times."""
+    def __init__(self, step: str): super().__init__(step); self.field = step
 
 # Helper function to ask question to user and record answer - replace internals when moving to front end
 def ask_and_return(state: State, llm_prompt: str) -> State:
@@ -67,74 +75,119 @@ def ask_and_return(state: State, llm_prompt: str) -> State:
         return {"error": str(e)}   
 
 
+# Normalize user inputs
+def _norm(s: str) -> str:
+    return " ".join(s.lower().strip().split())
+
+
+# Validate user inputs 
+def _choose_valid(
+    state: State, prompt: str, mapping: dict[str, str], 
+    invalid_prompt: str, step: str
+) -> str:
+    
+    tries = 3
+    user_input = ask_and_return(state, prompt)
+    while tries > 0:
+        key = _norm(user_input)
+        if key in mapping:
+            return mapping[key]
+        tries -= 1
+        if tries <= 0:
+            raise RetryLimitExceeded(step)
+        user_input = ask_and_return(state, invalid_prompt)
+
 # ============================================================
 # Nodes
 # ============================================================
 # ----- MAIN GRAPH -----
 def ask_role(state: State) -> State:
-    reply = ask_and_return(state, "Say 'What is your desired role?' exactly")
-    while True:
-        if reply in ROLES:
-            return {"role": ROLES[reply]}
-        else:
-            reply = ask_and_return(state, "Say 'Please input a valid role' exactly")
+    return  {
+        "role": _choose_valid(
+            state,
+            "Say 'What is your desired role?' exactly",
+            ROLES,
+            "Say 'Please input a valid role' exactly",
+            "ask_role"
+        )
+    }
 
 
 def ask_use_own_data(state: State) -> State:
-    reply = ask_and_return(state, "Say 'Do you wish to use your own data? (yes/no)' exactly")
-    while True:
-        if reply == "yes" or reply == "y":
-            return {"use_own_data": True}
-        elif reply == "no" or reply == "n":
-            return {"use_own_data": False}
-        else:
-            reply = ask_and_return(state, "Say 'Please answer with yes or no' exactly")
+    return  {
+        "use_own_data": _choose_valid(
+            state,
+            "Say 'Do you wish to use your own data? (yes/no)' exactly",
+            BINARY_REPLIES,
+            "Say 'Please answer with yes or no' exactly",
+            "ask_use_own_data"
+        )
+    }
 
 
 def ask_queue_type(state: State) -> State:
-    reply = ask_and_return(state, "Say 'Please select a queue type: ranked, draft or both' exactly")
-    while True:
-        if reply in QUEUES:
-            return {"queue_type": QUEUES[reply]}
-        else:
-            reply = ask_and_return(state, "Say 'Please input a valid queue type' exactly")
+    user_queue_type = _choose_valid(
+                state,
+                "Say 'Please select a queue type: ranked, draft or both' exactly",
+                QUEUES,
+                "Say 'Please input a valid queue type' exactly",
+                "ask_queue_type"
+    )
+    #if state.get("use_own_data"):
+    user_input = ask_and_return(state, "Say 'Please input your in-game user name and tagline exactly as it appears in your client (e.g. username#tagline)' exactly")
+    user_name, user_tag_line = user_input.split("#", 1)
+    submit_user_processing_job(user_name, user_tag_line, user_queue_type)
+    print("Submitted user data to S3")
 
+    return  {
+        "user_queue_type": user_queue_type,
+        "user_name": user_name,
+        "user_tag_line": user_tag_line
+    }
 
 
 def ask_champion_criteria(state: State) -> State:
 
-    def user_select_champion():
-        champion = ask_and_return(state, "Say 'Please state your desired champion' exactly")
-        while True:
-            if champion in ALL_CHAMPIONS:
-                return ALL_CHAMPIONS[champion]
-            else:
-                champion = ask_and_return(state, "Say 'Please input a valid champion name' exactly")
-
     if state.get("use_own_data"):
-        reply = ask_and_return(
-            state, """Say 'We will now select one of your champions' data to analyze. 
-            Shall we select one based on win rate, play rate or do you wish to choose one? 
-            (Minimum 10 games)' exactly"""
+        criteria = _choose_valid(
+            state,
+            "Say 'We will select one of your champions to analyze. Choose a criterion: win rate, play rate, or choose one (min 10 games).' exactly",
+            CHAMPION_CRITERIA,
+            "Say 'Please input a valid option: win rate, play rate, or choose one' exactly",
+            "ask_champion_criteria"
         )
-        while True:
-            if reply in CHAMPION_CRITERIA:
-                if CHAMPION_CRITERIA[reply] == "user_choice":
-                    return {"user_champion": user_select_champion()}
-                else:
-                    return {"champion_criteria": CHAMPION_CRITERIA[reply]}
-            else:
-                reply = ask_and_return(state, "Say 'Please input a valid queue type' exactly")
+        if criteria == "user_choice":
+            champion = _choose_valid(
+                state,
+                "Say 'Please state your desired champion' exactly",
+                ALL_CHAMPIONS,
+                "Say 'Please input a valid champion name' exactly",
+                "ask_user_champion_choice"
+            )
+            return {"user_champion": champion}
+        return {"champion_criteria": criteria}
     
-    else: # Consider pulling the champions list from chosen role df
-        reply = ask_and_return(
-            state, "Say 'Please select a champion who's playstyle most represent you' exactly"
-        )
-        while True:
-            if reply in ALL_CHAMPIONS:
-                return {"user_champion": CHAMPION_CRITERIA[reply]}
-            else:
-                reply = ask_and_return(state, "Say 'Please input a valid champion name' exactly")
+    champion = _choose_valid(
+        state,
+        "Say 'Please select a champion whose playstyle most represents you' exactly",
+        ALL_CHAMPIONS,
+        "Say 'Please input a valid champion name' exactly",
+        "ask_user_champion_choice"
+    )
+    return {"user_champion": champion}
+
+
+def ask_user_name_and_tag(state: State) -> State:
+    #if state.get("use_own_data"):
+    user_input = ask_and_return(state, "Say 'Please input your in-game user name and tagline exactly as it appears in your client (e.g. username#tagline)' exactly")
+    user_name, user_tag_line = user_input.split("#", 1)
+    submit_user_processing_job(user_name, user_tag_line)
+    print("Submitted user data to S3")
+
+# ============================================================
+# Recommender System Functions
+# ============================================================
+
 
 # ============================================================
 # Graph
@@ -149,7 +202,7 @@ graph.add_edge(START, "ask_role")
 graph.add_edge("ask_role", "ask_use_own_data")
 graph.add_conditional_edges(
     "ask_use_own_data",
-    lambda state: "go_queue_type" if state.get("ask_use_own_data") else "skip_to_champion",
+    lambda state: "go_queue_type" if state.get("use_own_data") else "skip_to_champion",
     {"go_queue_type": "ask_queue_type", "skip_to_champion": "ask_champion_criteria"}
 )
 graph.add_edge("ask_queue_type", "ask_champion_criteria")
@@ -164,5 +217,5 @@ print()
 # Driver
 # ============================================================
 if __name__ == "__main__":
-    result = app.invoke({"ask_role": "none"})
+    result = app.invoke({})
     print(">>> Final state:", result)

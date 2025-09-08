@@ -5,11 +5,9 @@ import json
 from dotenv import load_dotenv
 import time
 from tqdm import tqdm
-from typing import List, Optional
 import gc
-from pyspark.sql import SparkSession, DataFrame, Window
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-import boto3
 
 # Load environment variables and set up
 load_dotenv()
@@ -32,6 +30,10 @@ spark = (
         .appName("user_data_aggregation")
         .getOrCreate()
 )
+
+class QueueTypeError(Exception):
+    """Incorrect queue type input."""
+
 
 def handle_rate_limit(api_calls: int, start_time: float, buffer: int = 5) -> tuple[int, float]:
     """Handle Riot API rate limiting"""
@@ -76,8 +78,12 @@ def get_match_ids(
 
     if queue_type == "ranked":
         api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=420&start=0&count={matches_per_summoner}"
-    else: # Alternative is to process all matches, can be easily tuned to accept different queue types (ARAM, etc)
+    elif queue_type == "draft":
+        api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=400&start=0&count={matches_per_summoner}"
+    elif queue_type == "both": # Alternative is to process all matches, can be easily tuned to accept different queue types (ARAM, etc)
         api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&start=0&count={matches_per_summoner}"
+    else:
+        raise QueueTypeError
 
     api_calls = 0
     start_time = time.time()
@@ -151,5 +157,10 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str):
 
     return match_data_df
 
-def process_user_data(user_name, user_tag_line):
-    match_data_df = get_match_data(get_match_ids(get_puuid(user_name, user_tag_line)), CURRENT_PATCH)
+def compile_user_raw_data(user_name, user_tag_line, queue_type):
+
+    puuid = get_puuid(user_name, user_tag_line)
+    match_history = get_match_ids(puuid, queue_type)
+    match_data_df = get_match_data(match_history, CURRENT_PATCH)
+
+    return match_data_df
