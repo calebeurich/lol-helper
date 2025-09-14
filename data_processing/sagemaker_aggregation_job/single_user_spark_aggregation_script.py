@@ -11,6 +11,8 @@ load_dotenv()
 PATCH = "15_6"
 
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
+if not RIOT_API_KEY:
+    raise RuntimeError("RIOT_API_KEY not found in container env")
 HEADERS = {
     "X-Riot-Token": RIOT_API_KEY
 }
@@ -52,6 +54,8 @@ def get_puuid(user_name: str, user_tag_line: str) -> str:
         sys.exit("Request Timeout Error")
 
     except requests.HTTPError as e:
+        print("HTTP Error in getting puuid")
+        print(f"API Key ending in {HEADERS['X-Riot-Token'][-3:]}")
         sys.exit(f"HTTP Error: {e}")
         
     except Exception as e:
@@ -94,6 +98,7 @@ def get_match_ids(
         sys.exit("Request Timeout Error")
 
     except requests.HTTPError as e:
+        print("HTTP Error in getting match history")
         sys.exit(f"HTTP Error: {e}")
         
     except Exception as e:
@@ -102,7 +107,7 @@ def get_match_ids(
     if match_history:
         match_history_df = pd.DataFrame({
             "puuid": puuid,
-            "matchId": match_history
+            "match_id": match_history
         })
     
     else:
@@ -123,9 +128,20 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str, spark: Sp
         api_calls, start_time = handle_rate_limit(api_calls, start_time)
 
         url = f"https://americas.api.riotgames.com/lol/match/v5/matches/{match_id}"
-        response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()
-        match_data = response.json()
+        try:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            match_data = response.json()
+
+        except requests.Timeout:
+            sys.exit("Request Timeout Error")
+
+        except requests.HTTPError as e:
+            print("HTTP Error in getting match data")
+            sys.exit(f"HTTP Error: {e}")
+            
+        except Exception as e:
+            sys.exit(f"Error: {str(e)}")
 
         if "info" in match_data and "gameVersion" in match_data["info"]:
             game_patch = ".".join(match_data["info"]["gameVersion"].split(".")[:2])

@@ -1,6 +1,10 @@
-# CSVs and JSONs
+# CSVs, JSONs, txt and File
 *.csv
 *.json
+*.txt
+**/File
+**/[Ff]ile
+**/File*
 
 # Local data folder
 local_data/

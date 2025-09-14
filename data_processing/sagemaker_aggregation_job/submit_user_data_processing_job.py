@@ -6,6 +6,9 @@ import boto3, os, sagemaker
 
 # Load environment variables and set up
 load_dotenv()
+RIOT_API_KEY = os.getenv("RIOT_API_KEY")
+assert RIOT_API_KEY, "Missing RIOT_API_KEY locally"
+
 REGION = os.getenv("REGION")
 ROLE = os.getenv("ROLE") # ARN role, unrelated to team position
 INPUT_PATH = os.getenv("SINGLE_USER_RAW_DATA")
@@ -28,7 +31,10 @@ def submit_user_processing_job(user_name: str, user_tag_line:str, user_queue_typ
         instance_type             = "ml.m5.xlarge",
         max_runtime_in_seconds    = 1800,
         sagemaker_session         = session,
-        env                       = {"AWS_DEFAULT_REGION" : REGION},
+        env                       = {
+            "AWS_DEFAULT_REGION" : REGION,
+            "RIOT_API_KEY": RIOT_API_KEY
+        },
         tags                      = [{"Key" : "UseSpotInstances", "Value" : "True"}],
     )
 
