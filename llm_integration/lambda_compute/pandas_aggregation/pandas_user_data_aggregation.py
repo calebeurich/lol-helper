@@ -86,105 +86,109 @@ def create_matches_df(
     }
 
     if queue_type not in queue_id_map:
-        raise ValueError(f"Invalid queue_type: {queue_type}, must be one of {queue_id_map.tolist()}")
+        raise ValueError(f"Invalid queue_type: {queue_type}, must be one of {list(queue_id_map)}")
 
     # Parse all JSON at once
     parsed_col = raw_master_df["match_data"].apply(json.loads)
 
-    # Extract queue_id for filtering
-    raw_master_df["queue_id"] = parsed_col.apply(lambda x: x["info"]["queue_id"])
-
     # Filter for desired matches
-    filtered_df = raw_master_df[raw_master_df["queue_id"].isin(queue_id_map[queue_type])].copy()
+    filtered_df = raw_master_df.copy()
+    filtered_df["queue_id"] = parsed_col.map(lambda x: x["info"]["queue_id"])
+    filtered_df = filtered_df[filtered_df["queue_id"].isin(queue_id_map[queue_type])].copy()
 
     if filtered_df.empty:
         raise InsufficientSampleError(f"matches") 
 
-    # Extract participants and teams fields separately due to different granularity
-    filtered_df["participants"] = parsed_col[filtered_df.index].apply(lambda x: x["info"]["participants"])
-    filtered_df["teams"] = parsed_col[filtered_df.index].apply(lambda x: x["info"]["teams"])
+    filtered_df["participants"] = parsed_col.loc[filtered_df.index].map(lambda x: x["info"]["participants"])
+    filtered_df["teams"] = parsed_col.loc[filtered_df.index].map(lambda x: x["info"]["teams"])
+    filtered_df["match_id"] = parsed_col.loc[filtered_df.index].map(lambda x: x["metadata"]["match_id"])
 
-    # Explode participants with context
-    context_cols = ["puuid", "match_id"]
-    exploded_participants_df = filtered_df[context_cols + ["participants"]].explode("participants").reset_index(drop=True)
+    # Create participants_df, one row per participant
+    exploded_participants = filtered_df[["match_id", "participants"]].explode("participants", ignore_index=True)
+    normalized_participants = pd.json_normalize(exploded_participants["participants"], sep="_")
+    participants_df = pd.concat([exploded_participants[["match_id"]], normalized_participants], axis=1)
 
-    # Normalize participants
-    normalized_participants = pd.json_normalize(exploded_participants_df["participants"], sep="_")
-    participants_df = pd.concat([
-        exploded_participants_df[context_cols],
-        normalized_participants
-    ], axis=1)
-
-    # Explode teams with context
-    exploded_teams_df = filtered_df[context_cols + ["teams"]].explode("teams").reset_index(drop=True)
-
-    # Normalize teams
-    normalized_teams = pd.json_normalize(exploded_teams_df["teams"], sep="_")
-    teams_df = pd.concat([
-        exploded_teams_df[context_cols],
-        normalized_teams
-    ], axis=1)
+    # Create teams_df, one row per team, two rows per match
+    exploded_teams = filtered_df[["match_id", "teams"]].explode("teams", ignore_index=True)
+    normalized_teams = pd.json_normalize(exploded_teams["teams"], sep="_")
+    teams_df = pd.concat([exploded_teams[["match_id"]], normalized_teams], axis=1)
 
     return participants_df, teams_df
 
 
 def map_tags_and_summoner_spells_to_df(
-    participants_df: DataFrame,
+    participants_df: pd.DataFrame,
     items_dict: Dict[str, List[str]],
     summoner_spells_dict: Dict[str, str],
-) -> Tuple[DataFrame, Set[str], Set[str]]:
+) -> Tuple[pd.DataFrame, Set[str], Set[str]]:
 
     NUM_ITEM_SLOTS = 6
-    EMPTY_STRING = ""
 
-    # ========== Dict Data Validation ==========
+    # Validation
     if not items_dict:
         raise ValueError("items_dict cannot be empty")
     if not summoner_spells_dict:
-        raise ValueError("summ_spells_dict cannot be empty")
+        raise ValueError("summoner_spells_dict cannot be empty")
 
-    # ========== Process Item Tags ==========
-    # Create a new tags column per item and add item count features
-    unique_item_tags = {tag for tags in items_dict.values() for tag in tags}
+    # Universe sets
+    unique_item_tags: Set[str] = {tag for tags in items_dict.values() for tag in tags}
+    unique_summoner_spells: Set[str] = set(summoner_spells_dict.values())
 
+    # Map item IDs to tags
+    # Ensure Series type matches dict keys (keys are str in items_dict)
     for i in range(NUM_ITEM_SLOTS):
         participants_df[f"tags_{i}"] = participants_df[f"item{i}"].astype(str).map(items_dict)
 
-    # Count completed items and flatten tags
-    participants_df["number_of_items_completed"] = sum(
-        participants_df[f"tags_{i}"].notna() for i in range(NUM_ITEM_SLOTS)
+    tag_cols = [f"tags_{i}" for i in range(NUM_ITEM_SLOTS)]
+
+    # Number of completed items
+    participants_df["number_of_items_completed"] = (
+        participants_df[tag_cols].notna().sum(axis=1).astype("Int64")
     )
 
-    # Flatten all tags into single list
-    def flatten_tags(row):
-        all_tags = []
-        for i in range(NUM_ITEM_SLOTS):
-            if pd.notna(row[f"tags_{i}"]) and row[f"tags_{i}"]:
-                all_tags.extend(row[f"tags_{i}"])
-        return all_tags
+    # Build per-row item_tags and per-tag counts
+    # Long form: one row per (original_row, slot), keep only non-null lists
+    long = (
+        participants_df[tag_cols]
+        .melt(ignore_index=False, value_name="tag_list")
+        .drop(columns="variable")
+        .dropna(subset=["tag_list"])
+        .explode("tag_list")
+        .rename(columns={"tag_list": "tag"})
+    )
 
-    participants_df["item_tags"] = participants_df.apply(flatten_tags, axis=1)
+    # Per-row list of all tags
+    item_tags_series = long.groupby(level=0)["tag"].agg(list)
+    participants_df["item_tags"] = (
+        item_tags_series.reindex(participants_df.index).apply(lambda x: x if isinstance(x, list) else []).tolist()
+    )
 
-    # Create binary columns for each tag
-    for tag in unique_item_tags:
-        participants_df[f"tag_[{tag}]_count"] = participants_df["item_tags"].apply(
-            lambda tags: tags.count(tag) if tags else 0
-        )
+    # Per-tag counts per row
+    tag_counts = (
+        long.groupby(level=0)["tag"]
+            .value_counts()
+            .unstack(fill_value=0)
+            .reindex(columns=sorted(unique_item_tags), fill_value=0)  # ensure consistent columns
+    )
+    tag_counts = tag_counts.add_prefix("tag_[").add_suffix("]_count").astype("Int64")
 
-    # ========== Process Summoner Spell ids ==========
-    spell1_name = participants_df["summoner1_id"].astype(str).map(summoner_spells_dict)
-    spell2_name = participants_df["summoner2_id"].astype(str).map(summoner_spells_dict)
-    participants_df["summoner_spells_per_game"] = list(map(list, zip(spell1_name, spell2_name)))
-    
+    # Join counts back
+    participants_df = participants_df.join(tag_counts)
+
+    # Map summoner spell IDs to names
+    s1 = participants_df["summoner1_id"].astype(str).map(summoner_spells_dict)
+    s2 = participants_df["summoner2_id"].astype(str).map(summoner_spells_dict)
+    participants_df["summoner_spells_per_game"] = np.column_stack([s1, s2]).tolist()
+
+    # Cleanup
     cols_to_drop = (
-        [f"tags_{i}" for i in range(NUM_ITEM_SLOTS)]
-      + [f"item{i}" for i in range(NUM_ITEM_SLOTS)]
-      + ["summoner1_id", "summoner2_id", "item_tags"]
+        tag_cols +
+        [f"item{i}" for i in range(NUM_ITEM_SLOTS)] +
+        ["summoner1_id", "summoner2_id", "item_tags"]  # drop item_tags if you don't need to keep it
     )
-    
-    participants_df = participants_df.drop(col for col in cols_to_drop if col in participants_df.columns)
-    
-    return participants_df, unique_item_tags, summoner_spells_dict.values()
+    participants_df = participants_df.drop(columns=[c for c in cols_to_drop if c in participants_df.columns], errors="ignore")
+
+    return participants_df, unique_item_tags, unique_summoner_spells
 
 
 def derive_participant_dragon_stats(participants_df: pd.DataFrame):
@@ -256,19 +260,13 @@ def extract_fields_with_exclusions(
     return participants_df.assign(**new_cols)
 
 
-def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid = None): # Add granularity input
+def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid): # Add granularity input
     
-    merged_df = merged_df.filter(merged_df.puuid == user_puuid)
+    merged_df = merged_df[merged_df["puuid"] == user_puuid]
 
     mejais_check = pd.to_numeric(merged_df["challenges_mejais_full_stack_in_time"], errors="coerce")
     merged_df["fully_stacked_mejais"] = pd.Series(pd.NA, index=merged_df.index, dtype="Int64")
     merged_df.loc[mejais_check.gt(0), "fully_stacked_mejais"] = 1
-
-    grouped_df = merged_df.groupby(["champion_id", "champion_name","team_position"], dropna=False, as_index=False)
-
-    intermediate_df = grouped_df.agg(
-        
-    )
 
     grouped_df = merged_df.groupby(["champion_id", "champion_name","team_position"], dropna=False, as_index=False)
 
@@ -279,8 +277,8 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
 
     agg_map = dict(
         # counts / first
-        total_games_played_in_role = ("champion_id", "size"),        
-        total_games_per_champion   = ("total_games_per_champion", "first"),
+        total_games_played_in_role = ("match_id", "count"),        
+        total_games_per_champion   = ("champion_name", "count"),
 
         # core stats
         avg_kills                  = ("kills", "mean"),
@@ -624,65 +622,59 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         )
     
     intermediate_df = grouped_df.agg(**agg_map, **tag_aggs)
-
+    
     new_columns = {
         "role_play_rate": (
-            (intermediate_df["total_games_played_in_role"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_per_champion"].astype("Int64"))
+            (intermediate_df["total_games_played_in_role"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_per_champion"].astype("Float64"))
             .where(intermediate_df["total_games_per_champion"].ne(0))
         ),
 
         "pct_of_games_with_highest_damage_dealt": (
-            (intermediate_df["pct_of_games_with_highest_damage_dealt"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["pct_of_games_with_highest_damage_dealt"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "pct_of_games_with_highest_crowd_control_score": (
-            (intermediate_df["pct_of_games_with_highest_crowd_control_score"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["pct_of_games_with_highest_crowd_control_score"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "total_games_completed_supp_quest_first": (
-            (intermediate_df["total_games_completed_supp_quest_first"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["total_games_completed_supp_quest_first"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "pct_of_games_with_highest_wards_killed": (
-            (intermediate_df["pct_of_games_with_highest_wards_killed"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["pct_of_games_with_highest_wards_killed"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "kda": (
-            ((intermediate_df["avg_kills"].astype("Int64"))
-            .add(intermediate_df["avg_assists"].astype("Int64"))
-            .div(intermediate_df["avg_deaths"].astype("Int64")))
+            ((intermediate_df["avg_kills"].astype("Float64"))
+            .add(intermediate_df["avg_assists"].astype("Float64"))
+            .div(intermediate_df["avg_deaths"].astype("Float64")))
             .where(intermediate_df["avg_deaths"].ne(0))
         ),
 
         "win_rate": (
-            (intermediate_df["total_wins"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["total_wins"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "avg_cs": (
-            (intermediate_df["avg_minions_killed"]).astype("Int64")
-            .add(intermediate_df["avg_jungle_monsters_cs"]).astype("Int64")
-        ),
-
-        "avg_cs_per_minute": (
-            (intermediate_df["avg_cs"].astype("Int64"))
-            .div(intermediate_df["avg_time_played_per_game_minutes"].astype("Int64"))
-            .where(intermediate_df["avg_time_played_per_game_minutes"].ne(0))
+            (intermediate_df["avg_minions_killed"]).astype("Float64")
+            .add(intermediate_df["avg_jungle_monsters_cs"]).astype("Float64")
         ),
 
         "pct_games_first_to_complete_item": (
-            (intermediate_df["total_games_fastest_item_completion"].astype("Int64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Int64"))
+            (intermediate_df["total_games_fastest_item_completion"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         )
     }
@@ -690,6 +682,13 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
     new_columns_df = pd.DataFrame(new_columns)
 
     intermediate_df = pd.concat([intermediate_df, new_columns_df], axis=1)
+
+    # Create column that is derived from one of the new columns separately 
+    intermediate_df["avg_cs_per_minute"] = (
+        intermediate_df["avg_cs"].astype("Float64")
+        .div(intermediate_df["avg_time_played_per_game_minutes"].astype("Float64"))
+        .where(intermediate_df["avg_time_played_per_game_minutes"].ne(0))
+    )
 
     denominator = intermediate_df["avg_items_completed"].astype("Float64")
     pct_cols = {
@@ -808,3 +807,13 @@ def main_aggregator(
     single_user_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid)
 
     return single_user_df
+
+
+test_df = pd.read_csv("single_user_data_sample.csv")
+test_puuid = "Ou6LPc4Q_QF6qOQ69SBz5oZAY3dnaniTyKH9hE8fsGBWFveaXiYtrL_sQizh5_tPb6BUP3QHieQVAA"
+test_queue_type = "ranked"
+test_item_json = r"C:\Users\17862\Desktop\SnexCode\lol-helper\llm_integration\config\item_id_tags.json"
+
+if __name__ == "__main__":
+    test_output = main_aggregator(test_df, test_queue_type, test_item_json, test_puuid)
+    test_output.to_csv("test_output.csv")
