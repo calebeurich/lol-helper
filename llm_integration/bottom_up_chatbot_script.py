@@ -8,9 +8,9 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_aws import ChatBedrock  # or langchain_openai.ChatOpenAI, etc.
 from dotenv import load_dotenv
-from data_processing.sagemaker_aggregation_job.submit_user_data_processing_job import submit_user_processing_job
+from lambda_compute.user_data_collection_and_processing.lambda_pull_user_data import compile_and_aggregate_user_data
 
-from llm_integration.config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
+from config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
 
 # ============================================================
 # Environment setup and Literals/Types
@@ -136,7 +136,8 @@ def ask_queue_type(state: State) -> State:
     #if state.get("use_own_data"):
     user_input = ask_and_return(state, "Say 'Please input your in-game user name and tagline exactly as it appears in your client (e.g. username#tagline)' exactly")
     user_name, user_tag_line = user_input.split("#", 1)
-    submit_user_processing_job(user_name, user_tag_line, user_queue_type)
+    user_df = compile_and_aggregate_user_data(user_name, user_tag_line, user_queue_type)
+    user_df.to_csv("user_df.csv")
     print("Submitted user data to S3")
 
     return  {
@@ -181,7 +182,7 @@ def ask_user_name_and_tag(state: State) -> State:
     #if state.get("use_own_data"):
     user_input = ask_and_return(state, "Say 'Please input your in-game user name and tagline exactly as it appears in your client (e.g. username#tagline)' exactly")
     user_name, user_tag_line = user_input.split("#", 1)
-    submit_user_processing_job(user_name, user_tag_line)
+    #submit_user_processing_job(user_name, user_tag_line)
     print("Submitted user data to S3")
 
 # ============================================================

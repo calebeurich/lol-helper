@@ -89,19 +89,25 @@ def create_matches_df(
         raise ValueError(f"Invalid queue_type: {queue_type}, must be one of {list(queue_id_map)}")
 
     # Parse all JSON at once
-    parsed_col = raw_master_df["match_data"].apply(json.loads)
+    match_data_col = raw_master_df["match_data"]#.apply(json.loads)
 
     # Filter for desired matches
     filtered_df = raw_master_df.copy()
-    filtered_df["queue_id"] = parsed_col.map(lambda x: x["info"]["queue_id"])
+    print("Hello")
+    filtered_df.head(10)
+    filtered_df["queue_id"] = match_data_col.map(lambda x: x["info"]["queue_id"])
+    print("Hello2")
+    filtered_df.head(10)
     filtered_df = filtered_df[filtered_df["queue_id"].isin(queue_id_map[queue_type])].copy()
+    print("Hello3")
+    filtered_df.head(10)
 
     if filtered_df.empty:
         raise InsufficientSampleError(f"matches") 
 
-    filtered_df["participants"] = parsed_col.loc[filtered_df.index].map(lambda x: x["info"]["participants"])
-    filtered_df["teams"] = parsed_col.loc[filtered_df.index].map(lambda x: x["info"]["teams"])
-    filtered_df["match_id"] = parsed_col.loc[filtered_df.index].map(lambda x: x["metadata"]["match_id"])
+    filtered_df["participants"] = match_data_col.loc[filtered_df.index].map(lambda x: x["info"]["participants"])
+    filtered_df["teams"] = match_data_col.loc[filtered_df.index].map(lambda x: x["info"]["teams"])
+    filtered_df["match_id"] = match_data_col.loc[filtered_df.index].map(lambda x: x["metadata"]["match_id"])
 
     # Create participants_df, one row per participant
     exploded_participants = filtered_df[["match_id", "participants"]].explode("participants", ignore_index=True)
@@ -179,6 +185,23 @@ def map_tags_and_summoner_spells_to_df(
     s1 = participants_df["summoner1_id"].astype(str).map(summoner_spells_dict)
     s2 = participants_df["summoner2_id"].astype(str).map(summoner_spells_dict)
     participants_df["summoner_spells_per_game"] = np.column_stack([s1, s2]).tolist()
+
+    spells_long = (
+        pd.Series(participants_df["summoner_spells_per_game"], index=participants_df.index)
+        .explode()
+        .dropna()
+        .to_frame("spell")
+    )
+    spell_counts = (
+        spells_long.groupby(level=0)["spell"]
+        .value_counts()
+        .unstack(fill_value=0)
+        .reindex(columns=sorted(unique_summoner_spells), fill_value=0)
+    )
+    # Convert counts (0/1/2) to presence (0/1), compact dtype, and add "has_" prefix
+    has_spell = spell_counts.gt(0).astype("Int8")
+    has_spell.columns = [f"has_{c}" for c in has_spell.columns]
+    participants_df = participants_df.join(has_spell)
 
     # Cleanup
     cols_to_drop = (
@@ -275,6 +298,11 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         for tag in all_item_tags
     }   
 
+    summ_spells_aggs = {
+        f"pct_of_matches_with_{summoner_spell}": (f"has_{summoner_spell}", lambda x: 100*x.mean())
+        for summoner_spell in all_summoner_spells    
+    }
+
     agg_map = dict(
         # counts / first
         total_games_played_in_role = ("match_id", "count"),        
@@ -346,7 +374,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         avg_spell4_casts  = ("spell4_casts", "mean"),
         avg_ability_uses  = ("challenges_ability_uses", "mean"),
 
-            # Skillshot related (dodging and hitting)
+        # Skillshot related (dodging and hitting)
         avg_times_dodged_skillshot_in_small_window = ("challenges_dodge_skill_shots_small_window", "mean"),
         avg_skillshots_dodged                      = ("challenges_skillshots_dodged", "mean"),
         avg_skillshots_landed_early_game           = ("challenges_land_skill_shots_early_game", "mean"),
@@ -621,7 +649,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
                                                     lambda s: (pd.to_numeric(s, errors="coerce")).sum())
         )
     
-    intermediate_df = grouped_df.agg(**agg_map, **tag_aggs)
+    intermediate_df = grouped_df.agg(**{**agg_map, **tag_aggs, **summ_spells_aggs})
     
     new_columns = {
         "role_play_rate": (
@@ -777,7 +805,7 @@ Finally, match_data will be dropped
 def main_aggregator(
     raw_master_df: pd.DataFrame,
     queue_type: str,
-    items_json_path: str,
+    items_dict: dict,
     user_puuid: str
 ) -> DataFrame:
     
@@ -785,10 +813,6 @@ def main_aggregator(
 
     # Create an indicator column for games where champion had a dragon takedown, and subsequent columns with the timing of first dragon takedown
     participants_df = derive_participant_dragon_stats(participants_df)
-
-    # Load JSON from local file instead of S3
-    with open(items_json_path, "r") as f:
-        items_dict = json.loads(f.read())
 
     participants_df, all_item_tags, all_summoner_spells = map_tags_and_summoner_spells_to_df(
         participants_df, 
@@ -808,12 +832,3 @@ def main_aggregator(
 
     return single_user_df
 
-
-test_df = pd.read_csv("single_user_data_sample.csv")
-test_puuid = "Ou6LPc4Q_QF6qOQ69SBz5oZAY3dnaniTyKH9hE8fsGBWFveaXiYtrL_sQizh5_tPb6BUP3QHieQVAA"
-test_queue_type = "ranked"
-test_item_json = r"C:\Users\17862\Desktop\SnexCode\lol-helper\llm_integration\config\item_id_tags.json"
-
-if __name__ == "__main__":
-    test_output = main_aggregator(test_df, test_queue_type, test_item_json, test_puuid)
-    test_output.to_csv("test_output.csv")
