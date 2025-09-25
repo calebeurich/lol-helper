@@ -173,25 +173,20 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str):
 
     match_data_df = pd.DataFrame.from_records(rows, columns=["puuid", "match_id", "match_data"])
     match_data_df.rename(columns=camel_to_snake, inplace=True)
-
     return match_data_df
 
 
-def compile_and_aggregate_user_data(user_name, user_tag_line, queue_type):
+def compile_user_data(user_name, user_tag_line, queue_type):
 
     puuid = get_puuid(user_name=user_name, user_tag_line=user_tag_line)
     match_history_df = get_match_ids(puuid=puuid, queue_type=queue_type)
 
     match_data_df = get_match_data(match_history_df=match_history_df, current_patch=CURRENT_PATCH)
-    match_data_df.to_csv("match_data_test1.csv")
 
     try:
         with open("item_id_tags.json", "r") as f:
             items_dict = json.load(f)
     except FileNotFoundError:
         print("Items dict json not found")
-    match_data_df.to_csv("match_data_test.csv")
 
-    user_df = main_aggregator(raw_master_df=match_data_df, queue_type=queue_type, items_dict=items_dict, user_puuid=puuid)
-
-    return user_df
+    return match_data_df, items_dict, puuid

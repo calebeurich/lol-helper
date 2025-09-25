@@ -8,7 +8,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_aws import ChatBedrock  # or langchain_openai.ChatOpenAI, etc.
 from dotenv import load_dotenv
-from lambda_compute.user_data_collection_and_processing.lambda_pull_user_data import compile_and_aggregate_user_data
+from lambda_compute.user_data_collection_and_processing.lambda_pull_user_data import compile_user_data
+from lambda_compute.user_data_collection_and_processing.pandas_user_data_aggregation import main_aggregator
 
 from config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
 
@@ -59,6 +60,7 @@ class State(TypedDict, total=False):
     user_tag_line: Optional[str]
     champion_criteria: Optional[str]
     user_champion: Optional[str]
+    user_data: Optional[dict]
 
 
 class RetryLimitExceeded(Exception):
@@ -136,14 +138,16 @@ def ask_queue_type(state: State) -> State:
     #if state.get("use_own_data"):
     user_input = ask_and_return(state, "Say 'Please input your in-game user name and tagline exactly as it appears in your client (e.g. username#tagline)' exactly")
     user_name, user_tag_line = user_input.split("#", 1)
-    user_df = compile_and_aggregate_user_data(user_name, user_tag_line, user_queue_type)
-    user_df.to_csv("user_df.csv")
-    print("Submitted user data to S3")
+    match_data_df, items_dict, user_puuid = compile_user_data(user_name, user_tag_line, user_queue_type)
+
+    user_df = main_aggregator(raw_master_df=match_data_df, queue_type=user_queue_type, items_dict=items_dict, user_puuid=user_puuid)
+    user_df = user_df.to_dict(orient="records")
 
     return  {
         "user_queue_type": user_queue_type,
         "user_name": user_name,
-        "user_tag_line": user_tag_line
+        "user_tag_line": user_tag_line,
+        "user_data": user_df
     }
 
 

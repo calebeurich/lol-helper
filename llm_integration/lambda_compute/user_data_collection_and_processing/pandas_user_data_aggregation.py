@@ -1,11 +1,5 @@
-import re, json
-import boto3
-from typing import Dict, List, Set, Tuple, Any, Optional
-from urllib.parse import urlparse
-from pyspark.sql import SparkSession, DataFrame, Window
-from pyspark.sql.types import StringType
-from pyspark.sql import functions as F
-from enum import Enum
+import warnings
+from typing import Dict, List, Set, Tuple, Optional
 import pandas as pd
 import numpy as np
 
@@ -93,14 +87,8 @@ def create_matches_df(
 
     # Filter for desired matches
     filtered_df = raw_master_df.copy()
-    print("Hello")
-    filtered_df.head(10)
     filtered_df["queue_id"] = match_data_col.map(lambda x: x["info"]["queue_id"])
-    print("Hello2")
-    filtered_df.head(10)
     filtered_df = filtered_df[filtered_df["queue_id"].isin(queue_id_map[queue_type])].copy()
-    print("Hello3")
-    filtered_df.head(10)
 
     if filtered_df.empty:
         raise InsufficientSampleError(f"matches") 
@@ -285,7 +273,7 @@ def extract_fields_with_exclusions(
 
 def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid): # Add granularity input
     
-    merged_df = merged_df[merged_df["puuid"] == user_puuid]
+    merged_df = merged_df[merged_df["puuid"] == user_puuid].copy()
 
     mejais_check = pd.to_numeric(merged_df["challenges_mejais_full_stack_in_time"], errors="coerce")
     merged_df["fully_stacked_mejais"] = pd.Series(pd.NA, index=merged_df.index, dtype="Int64")
@@ -320,7 +308,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
 
         # damage dealt stats
         # keep as sum (Spark comment: derive % later because of NULLs)
-        pct_of_games_with_highest_damage_dealt = ("challenges_highest_champion_damage", "sum"),
+        sum_of_games_with_highest_damage_dealt = ("challenges_highest_champion_damage", "sum"),
         avg_pct_damage_dealt_in_team           = ("challenges_team_damage_percentage", "mean"),
         average_damage_per_minute              = ("challenges_damage_per_minute", "mean"),
         avg_damage_dealt_to_champions          = ("total_damage_dealt_to_champions", "mean"),
@@ -348,7 +336,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         avg_times_took_large_damage_survived                      = ("challenges_took_large_damage_survived", "mean"),
 
         # Crowd control
-        pct_of_games_with_highest_crowd_control_score = ("challenges_highest_crowd_control_score", "sum"),  # keep sum; derive % later
+        sum_of_games_with_highest_crowd_control_score = ("challenges_highest_crowd_control_score", "sum"),  # keep sum; derive % later
         avg_time_ccing_others                         = ("time_c_cing_others", "mean"),
         avg_times_applied_cc_on_others                = ("total_time_cc_dealt", "mean"),
         avg_enemy_champion_immobilizations            = ("challenges_enemy_champion_immobilizations", "mean"),
@@ -359,7 +347,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         avg_total_units_healed            = ("total_units_healed", "mean"),
         avg_dmg_shielded_on_team          = ("total_damage_shielded_on_teammates", "mean"),
         avg_effective_heal_and_shield     = ("challenges_effective_heal_and_shielding", "mean"),
-        total_games_completed_supp_quest_first = ("challenges_faster_support_quest_completion",
+        sum_of_games_completed_supp_quest_first = ("challenges_faster_support_quest_completion",
                                                 lambda s: s.astype("Int64").fillna(0).sum()),
         avg_supp_quest_completion_time    = ("complete_support_quest_in_time", "mean"),
 
@@ -483,7 +471,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         avg_unseen_recalls                                 = ("challenges_unseen_recalls", "mean"),
 
         # Wards killed
-        pct_of_games_with_highest_wards_killed             = ("challenges_highest_ward_kills",
+        sum_of_games_with_highest_wards_killed             = ("challenges_highest_ward_kills",
                                                             lambda s: s.astype("Int64").sum()),   # keep SUM (not % yet)
         avg_wards_killed                                   = ("wards_killed", "mean"),
         avg_ward_takedowns                                 = ("challenges_ward_takedowns", "mean"),
@@ -649,7 +637,11 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
                                                     lambda s: (pd.to_numeric(s, errors="coerce")).sum())
         )
     
-    intermediate_df = grouped_df.agg(**{**agg_map, **tag_aggs, **summ_spells_aggs})
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="DataFrame is highly fragmented")
+        intermediate_df = grouped_df.agg(**{**agg_map, **tag_aggs, **summ_spells_aggs})
+    
+    intermediate_df = intermediate_df.copy()
     
     new_columns = {
         "role_play_rate": (
@@ -659,25 +651,25 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         ),
 
         "pct_of_games_with_highest_damage_dealt": (
-            (intermediate_df["pct_of_games_with_highest_damage_dealt"].astype("Float64")).mul(100)
+            (intermediate_df["sum_of_games_with_highest_damage_dealt"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "pct_of_games_with_highest_crowd_control_score": (
-            (intermediate_df["pct_of_games_with_highest_crowd_control_score"].astype("Float64")).mul(100)
+            (intermediate_df["sum_of_games_with_highest_crowd_control_score"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
-
+        # Change name to pct when we change spark
         "total_games_completed_supp_quest_first": (
-            (intermediate_df["total_games_completed_supp_quest_first"].astype("Float64")).mul(100)
+            (intermediate_df["sum_of_games_completed_supp_quest_first"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
 
         "pct_of_games_with_highest_wards_killed": (
-            (intermediate_df["pct_of_games_with_highest_wards_killed"].astype("Float64")).mul(100)
+            (intermediate_df["sum_of_games_with_highest_wards_killed"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
         ),
@@ -725,9 +717,13 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         for tag in all_item_tags
     }
 
+    columns_to_drop = [f"avg_{tag}_count" for tag in all_item_tags] + [
+        "sum_of_games_with_highest_damage_dealt", "sum_of_games_with_highest_crowd_control_score", 
+        "sum_of_games_completed_supp_quest_first", "sum_of_games_with_highest_wards_killed"]
+
     final_df = (
         intermediate_df
-        .drop(columns=[f"avg_{tag}_count" for tag in all_item_tags])
+        .drop(columns=columns_to_drop)
         .assign(**pct_cols)
     )
 
@@ -807,7 +803,7 @@ def main_aggregator(
     queue_type: str,
     items_dict: dict,
     user_puuid: str
-) -> DataFrame:
+) -> pd.DataFrame:
     
     participants_df, teams_df = create_matches_df(raw_master_df, queue_type)
 
