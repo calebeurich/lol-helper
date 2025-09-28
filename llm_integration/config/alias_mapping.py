@@ -24,7 +24,7 @@ QUEUES = {
 
 CHAMPION_CRITERIA = {
     "win_rate": "win_rate", "win rate": "win_rate", "winrate": "win_rate", "wr": "win_rate", "win": "win_rate",
-    "play rate": "play_rate", "playrate": "play_rate", "play": "play_rate",
+    "play rate": "role_play_rate", "play_rate": "role_play_rate", "playrate": "role_play_rate", "play": "role_play_rate",
     "choose one": "user_choice", "choose": "user_choice", "chooseone": "user_choice", "choice": "user_choice"
 }
 
