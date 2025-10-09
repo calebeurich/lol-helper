@@ -51,7 +51,7 @@ class DragonTimings:
 class InsufficientSampleError(Exception):
     def __init__(self, sample_type: str):
         self.sample_type = sample_type
-        message = f"Insufficient sample of {sample_type}"
+        message = f"Insufficient number of {sample_type}"
         super().__init__(message)
 
 
@@ -70,17 +70,9 @@ SUMMONER_SPELLS_DICT = {
 
 def create_matches_df(
     raw_master_df: pd.DataFrame,
-    queue_type: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
-    queue_id_map = {
-        "draft": [400],
-        "ranked": [420],
-        "both": [400, 420]
-    }
-
-    if queue_type not in queue_id_map:
-        raise ValueError(f"Invalid queue_type: {queue_type}, must be one of {list(queue_id_map)}")
+    valid_queue_id = [400, 420, 440]
 
     # Parse all JSON at once
     match_data_col = raw_master_df["match_data"]#.apply(json.loads)
@@ -88,10 +80,10 @@ def create_matches_df(
     # Filter for desired matches
     filtered_df = raw_master_df.copy()
     filtered_df["queue_id"] = match_data_col.map(lambda x: x["info"]["queue_id"])
-    filtered_df = filtered_df[filtered_df["queue_id"].isin(queue_id_map[queue_type])].copy()
+    filtered_df = filtered_df[filtered_df["queue_id"].isin(valid_queue_id)].copy()
 
     if filtered_df.empty:
-        raise InsufficientSampleError("matches") 
+        raise InsufficientSampleError("games played for this queue type and/or patch") 
 
     filtered_df["participants"] = match_data_col.loc[filtered_df.index].map(lambda x: x["info"]["participants"])
     filtered_df["teams"] = match_data_col.loc[filtered_df.index].map(lambda x: x["info"]["teams"])
@@ -271,15 +263,72 @@ def extract_fields_with_exclusions(
     return participants_df.assign(**new_cols)
 
 
-def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid): # Add granularity input
+def valid_champions_by_queue(merged_df: pd.DataFrame, minimum_games: int):
+    queue_map = {"draft":400,"ranked":420, "flex":440}
     
-    merged_df = merged_df[merged_df["puuid"] == user_puuid].copy()
+    games_by_queue = (
+        merged_df
+        .groupby(["champion_name", "queue_id"])
+        .size()
+        .rename("games_played")
+        .reset_index()
+    )
+    total_games = (
+        merged_df
+        .groupby("champion_name")
+        .size()
+        .rename("games_played")
+        .reset_index()
+    )
+
+    # Filter champions meeting threshold for ranked queue
+    solo_ranked = games_by_queue.loc[
+        (games_by_queue["queue_id"] == queue_map["ranked"]) &
+        (games_by_queue["games_played"] >= minimum_games),
+        "champion_name"
+    ].unique().tolist()
+
+    all_ranked = games_by_queue.loc[
+        games_by_queue["queue_id"].isin([queue_map["ranked"], queue_map["flex"]]) &
+        (games_by_queue["games_played"] >= minimum_games),
+        "champion_name"
+    ].unique().tolist()
+    
+    draft = games_by_queue.loc[
+        (games_by_queue["queue_id"] == queue_map["draft"]) &
+        (games_by_queue["games_played"] >= minimum_games),
+        "champion_name"
+    ].unique().tolist()
+    
+    total = total_games.loc[
+        total_games["games_played"] >= minimum_games,
+        "champion_name"
+    ].unique().tolist()
+
+    valid_champions_dict = {
+        "Ranked Solo Queue": solo_ranked,
+        "Ranked Including Flex": all_ranked,
+        "Draft": draft,
+        "All Queues": total
+    }
+
+    filtered_dict = {k: v for k, v in valid_champions_dict.items() if len(v) > 0}
+
+    return filtered_dict
+
+def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type): 
+    queue_map = {"draft":["400"], "ranked_solo_queue":["420"], "ranked_including_flex":["420","440"]}
+    
+    allowed = queue_map.get(queue_type)
+    merged_df = merged_df.loc[merged_df["puuid"] == user_puuid].copy()
+    if allowed is not None:
+        merged_df = merged_df.loc[merged_df["queue_id"].isin(allowed)].copy()
 
     mejais_check = pd.to_numeric(merged_df["challenges_mejais_full_stack_in_time"], errors="coerce")
     merged_df["fully_stacked_mejais"] = pd.Series(pd.NA, index=merged_df.index, dtype="Int64")
     merged_df.loc[mejais_check.gt(0), "fully_stacked_mejais"] = 1
 
-    grouped_df = merged_df.groupby(["champion_id", "champion_name","team_position"], dropna=False, as_index=False)
+    grouped_df = merged_df.groupby(["champion_id", "champion_name"], dropna=False, as_index=False)
 
     tag_aggs = {
         f"avg_{tag}_count": (f"tag_[{tag}]_count", "mean")
@@ -798,14 +847,14 @@ def derive_counter_stats_pd(
 Main aggregating functions, uses helpers as needed, idea is to pull all wanted keys from match_data struct into columns (some keys will be modified, derived)
 Finally, match_data will be dropped
 """
-def main_aggregator(
+def find_valid_queues(
     raw_master_df: pd.DataFrame,
-    queue_type: str,
     items_dict: dict,
-    user_puuid: str
+    role: str,
+    minimum_games: int
 ) -> pd.DataFrame:
     
-    participants_df, teams_df = create_matches_df(raw_master_df, queue_type)
+    participants_df, teams_df = create_matches_df(raw_master_df)
 
     # Create an indicator column for games where champion had a dragon takedown, and subsequent columns with the timing of first dragon takedown
     participants_df = derive_participant_dragon_stats(participants_df)
@@ -824,7 +873,16 @@ def main_aggregator(
         how="left",
     )
 
-    single_user_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid)
+    merged_df = merged_df[merged_df["team_position"] == role]
 
-    return single_user_df
+    valid_queues = valid_champions_by_queue(merged_df, minimum_games)
+    
+    return merged_df, valid_queues, all_item_tags, all_summoner_spells
+
+def aggregate_user_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type, minimum_games):
+
+    single_user_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type)
+    filtered_df = single_user_df[single_user_df["total_games_played_in_role"] >= minimum_games]
+
+    return filtered_df
 

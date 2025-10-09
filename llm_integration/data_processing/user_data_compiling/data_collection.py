@@ -1,4 +1,4 @@
-from data_processing.user_data_compiling.pandas_user_data_aggregation import main_aggregator
+from data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
 from dotenv import load_dotenv
 from functools import lru_cache
 import pandas as pd
@@ -11,11 +11,6 @@ RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 HEADERS = {
     "X-Riot-Token": RIOT_API_KEY
 }
-
-# In production these will need to be taken as inputs 
-CURRENT_PATCH = "15.6"
-PATCH_START_TIME = "1742342400" # March 19th, 2025 in timestamp seconds
-PATCH_END_TIME = "1743552000" # APRIL 4TH, 2025 in timestamp
 
 BATCH_SIZE = 100
 SAVE_FREQUENCY = 50
@@ -77,53 +72,56 @@ def get_puuid(user_name: str, user_tag_line: str) -> str:
 
 def get_match_ids(
     puuid: str,
-    queue_type: str = "ranked",
-    patch_start_time: str = PATCH_START_TIME, 
-    patch_end_time: str = PATCH_END_TIME, 
+    patch_start_time: str, 
+    patch_end_time: str,
     matches_per_summoner: int = 100,
 ) -> pd.DataFrame:
-
-    if queue_type == "ranked":
-        api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=420&start=0&count={matches_per_summoner}"
-    elif queue_type == "draft":
-        api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=400&start=0&count={matches_per_summoner}"
-    elif queue_type == "both": # Alternative is to process all matches, can be easily tuned to accept different queue types (ARAM, etc)
-        api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&start=0&count={matches_per_summoner}"
-    else:
-        raise QueueTypeError
+    
+    ranked_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=420&start=0&count={matches_per_summoner}"
+    draft_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=400&start=0&count={matches_per_summoner}"
+    queue_url_map = {ranked_api_url:"ranked", draft_api_url:"draft"}
 
     api_calls = 0
     start_time = time.time()
 
     api_calls, start_time = handle_rate_limit(api_calls, start_time)
 
-    try:
-        response = requests.get(
-            api_url, headers=HEADERS, timeout=10
+    match_history = set()
+    num_games_per_queue = {}
+
+    for url, queue_type in queue_url_map.items():
+        try:
+            response = requests.get(
+                url, headers=HEADERS, timeout=10
             )
-        
-        response.raise_for_status()
-        match_history = response.json()
+            
+            response.raise_for_status()
+            match_ids = response.json()
+            num_games_per_queue[queue_type] = len(match_ids)
+            match_history.update(match_ids)
 
-    except requests.Timeout:
-        sys.exit("Request Timeout Error")
+        except requests.Timeout:
+            sys.exit("Request Timeout Error")
 
-    except requests.HTTPError as e:
-        sys.exit(f"HTTP Error: {e}")
-        
-    except Exception as e:
-        sys.exit(f"Error: {str(e)}")
+        except requests.HTTPError as e:
+            sys.exit(f"HTTP Error: {e}")
+            
+        except Exception as e:
+            sys.exit(f"Error: {str(e)}")
     
-    if match_history:
+    if len(match_history) >= 10:
         match_history_df = pd.DataFrame({
             "puuid": puuid,
-            "match_id": match_history
+            "match_id": list(match_history)
         })
+    
+    elif match_history:
+        raise InsufficientSampleError("games played (including ranked and draft) in this account in the desired patch.")
     
     else:
         sys.exit("No matches found for specified time period.") 
 
-    return match_history_df
+    return match_history_df, num_games_per_queue
 
 
 def get_match_data(match_history_df: pd.DataFrame, current_patch: str):
@@ -176,12 +174,12 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str):
     return match_data_df
 
 
-def compile_user_data(user_name, user_tag_line, queue_type):
+def compile_user_data(user_name, user_tag_line, patch_start_time, patch_end_time, current_patch):
 
     puuid = get_puuid(user_name=user_name, user_tag_line=user_tag_line)
-    match_history_df = get_match_ids(puuid=puuid, queue_type=queue_type)
+    match_history_df, num_games_per_queue = get_match_ids(puuid, patch_start_time, patch_end_time)
 
-    match_data_df = get_match_data(match_history_df=match_history_df, current_patch=CURRENT_PATCH)
+    match_data_df = get_match_data(match_history_df, current_patch)
 
     try:
         with open("item_id_tags.json", "r") as f:
@@ -189,4 +187,4 @@ def compile_user_data(user_name, user_tag_line, queue_type):
     except FileNotFoundError:
         print("Items dict json not found")
 
-    return match_data_df, items_dict, puuid
+    return match_data_df, items_dict, puuid, num_games_per_queue

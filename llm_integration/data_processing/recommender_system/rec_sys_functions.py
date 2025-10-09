@@ -3,23 +3,23 @@ from data_processing.user_data_compiling.pandas_user_data_aggregation import Ins
 import pandas as pd
 import numpy as np
 
-MINIMUM_GAMES = 10
+queue_map = {"draft":[400], "ranked_solo_queue":[420], "ranked_including_flex":[420,440]}
 
-def filter_by_champion(user_df: pd.DataFrame, champion_name: str):
-    filtered_row =  user_df[user_df["champion_name"] == champion_name]
-    if filtered_row.empty or int(filtered_row["total_games_played_in_role"]) < MINIMUM_GAMES:
-        raise InsufficientSampleError("champion games")
+def find_available_champions(df: pd.DataFrame, queue_type: str):
+    filtered_df = df[df["queue_id"].isin(queue_map[queue_type])].copy() if queue_type.isin(queue_map) else df.copy()
+
+def extract_vector(df: pd.DataFrame, criterion: str, minimum_games: int):
+    if criterion not in {"win_rate", "role_play_rate"}:
+        filtered_row = df[df["champion_name"] == criterion]
+    else:
+        filtered_row = df.iloc[df[criterion].idxmax()]
+
+    if filtered_row.empty or int(filtered_row["total_games_played_in_role"]) < minimum_games:
+        raise InsufficientSampleError("champion games for your desired criterion or champion")
     
     if len(filtered_row) > 1:
         # This shouldn't happen if champions per role are unique
-        raise ValueError(f"Data integrity issue: Multiple rows with champion_name {champion_name}")
+        raise ValueError(f"Data integrity issue: Multiple rows with champion_name: {criterion}")
     
     return filtered_row.iloc[0] # Convert to dict in chatbot code
 
-
-def filter_by_criterion(df: pd.DataFrame, criterion: str):
-    if df.empty or df[criterion].dropna().empty:
-        raise ValueError(f"No valid values in column '{criterion}'")
-    
-    index = df[criterion].idxmax()
-    return df.loc[index]

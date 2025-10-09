@@ -17,9 +17,10 @@ BINARY_REPLIES = {
 }
 
 QUEUES = {
-    "ranked":"ranked", "rank":"ranked", "rankd":"ranked",
+    "Ranked Solo Queue":"ranked_solo_queue", "solo queue":"ranked_solo_queue", "solo":"ranked_solo_queue",
+    "Ranked Including Flex":"ranked_including_flex", "Ranked Flex": "ranked_including_flex", "all ranked": "ranked_including_flex",
     "draft":"draft", "norm":"draft", "norms":"draft", "normal":"draft",
-    "both":"both"
+    "All Queues":"all_queues", "All":"all_queues"
 }
 
 CHAMPION_CRITERIA = {

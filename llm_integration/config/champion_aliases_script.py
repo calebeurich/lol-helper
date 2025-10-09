@@ -1,183 +1,71 @@
 import re
 import json
 import unicodedata
-from typing import Dict, Set, Any
+from typing import Dict, Set, Optional
 import requests
-from bs4 import BeautifulSoup
 
-# Switch into main aggregation pipeline, so champion aliases are compiled with it
+DD_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json"
+DD_CHAMPS_URL_TPL = "https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json"
 
-# -------- Fetch champion names by parsing League of Legends official website --------
-def fetch_from_official():
-    url = "https://www.leagueoflegends.com/en-us/champions/"
-    html = requests.get(url, timeout=20).text
-    soup = BeautifulSoup(html, "html.parser")
+def fetch_ddragon_version(version: Optional[str] = None, timeout: int = 20) -> str:
+    """Return a Data Dragon version. If None, fetch the latest."""
+    if version:
+        return version
+    resp = requests.get(DD_VERSIONS_URL, timeout=timeout)
+    resp.raise_for_status()
+    versions = resp.json()
+    if not isinstance(versions, list) or not versions:
+        raise RuntimeError("Unexpected versions payload from Data Dragon.")
+    return versions[0]  # latest
 
-    names = {
-        a.get_text(strip=True)
-        for a in soup.select("a")
-        if isinstance(a.get("href"), str) and a.get("href", "").startswith("/en-us/champions/")
-    }
-    # Clean
-    return {n.strip() for n in names if n and len(n) <= 40}
+def fetch_champion_names_from_ddragon(version: Optional[str] = None, timeout: int = 20) -> Set[str]:
+    """Fetch canonical champion display names (exact strings) from Data Dragon."""
+    v = fetch_ddragon_version(version, timeout=timeout)
+    url = DD_CHAMPS_URL_TPL.format(version=v)
+    resp = requests.get(url, timeout=timeout)
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get("data", {})
+    names = {entry.get("name", "").strip() for entry in data.values()}
+    return {n for n in names if n and 1 < len(n) <= 40}
 
+def ascii_fold(s: str) -> str:
+    """Remove accents but keep original casing."""
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
-def fetch_from_universe():
-    url = "https://universe.leagueoflegends.com/en_US/champions/"
-    html = requests.get(url, timeout=20).text
-    soup = BeautifulSoup(html, "html.parser")
-    texts = {text.get_text(strip=True) for text in soup.find_all(True)}
-    keep = set()
-    for text in texts:
-        if 2 <= len(text) <= 40 and re.search(r"[A-Za-z]", t):
-            # crude filter; add more to this denylist if needed
-            if text.lower() not in {"explore", "runeterra", "the void", "freljord", "noxus", "zaun", "piltover"}:
-                keep.add(text)
-    return keep
+def dd_name_to_pascal_compact(name: str) -> str:
+    """
+    PascalCase, no special characters:
+      - Split on any non-alphanumeric boundary
+      - Keep original token capitalization (so 'LeBlanc' stays 'LeBlanc')
+      - Concatenate tokens
+      Examples:
+        "K'Sante"            -> "KSante"
+        "Jarvan IV"          -> "JarvanIV"
+        "Nunu & Willump"     -> "NunuWillump"
+        "Cho'Gath"           -> "ChoGath"
+        "Kha'Zix"            -> "KhaZix"
+    """
+    s = ascii_fold(name)
+    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", s) if t]
+    return "".join(tokens)
 
-
-def get_og_names():
-    names = fetch_from_official()
-    if len(names) < 50: 
-        names |= fetch_from_universe()
-    return {name.strip() for name in names if name.strip()}
-
-
-# -------- Helpers to Clean Text --------
-def ascii_fold(string):
-    return unicodedata.normalize("NFKD", string).encode("ascii", "ignore").decode("ascii")
-
-
-def keep_apostrophes(string):
-    # keep apostrophes, remove spaces
-    string = ascii_fold(string).lower().strip()
-    string = re.sub(r"\s+", " ", string)
-    return string
-
-
-def remove_apostrophes(string):
-    # remove apostrophes/dots/dashes/spaces
-    string = keep_apostrophes(string)
-    string = re.sub(r"[’'`]", "", string) # drop apostrophes
-    string = re.sub(r"[.\-]", "", string) # drop dots/dashes
-    return string
-
-
-def remove_space(string):
-    return remove_apostrophes(string).replace(" ", "")
-
-
-# -------- Variant generator (clean) --------
-ROMAN_MAP = {" i": " 1", " ii": " 2", " iii": " 3", " iv": " 4", " v": " 5"}
-
-def variants_for(name):
-    # Account for spaces, apostrophes and roman numerals
-    variants = set()
-
-    cleaned_with_apostrophes = keep_apostrophes(name)   # e.g. kha'zix
-    cleaned_without_apostrophes = remove_apostrophes(name)     # e.g. khazixs
-
-    # Include cleaned variant without apostrophes or spaces
-    variants.add(cleaned_without_apostrophes)                   # "khazix"
-    variants.add(remove_space(name))                # "khazix", "missfortune", "jarvaniv"
-
-    # If there are spaces (after punctuation removal), add hyphen/underscore
-    if " " in cleaned_without_apostrophes:
-        variants.add(cleaned_without_apostrophes.replace(" ", "-"))
-        variants.add(cleaned_without_apostrophes.replace(" ", "_"))
-
-    # Apostrophe-as-space (kha zix, vel koz, cho gath, kog maw)
-    if "'" in cleaned_with_apostrophes:
-        variants.add(cleaned_with_apostrophes)
-        replace_apostrophe_w_space = re.sub(r"\s+", " ", cleaned_with_apostrophes.replace("'", " ")).strip()
-        if replace_apostrophe_w_space:
-            variants.add(replace_apostrophe_w_space)
-            if " " in replace_apostrophe_w_space:
-                variants.add(replace_apostrophe_w_space.replace(" ", "-"))
-                variants.add(replace_apostrophe_w_space.replace(" ", "_"))
-
-    # Roman numerals → numbers with and without space (jarvan iv: jarvan 4, jarvan4)
-    for roman, number in ROMAN_MAP.items():
-        if cleaned_without_apostrophes.endswith(roman):
-            number_spaced = cleaned_without_apostrophes.replace(roman, number)   # "jarvan 4"
-            variants.add(number_spaced)
-            variants.add(number_spaced.replace(" ", ""))          # "jarvan4"
-
-    return {text.strip() for text in variants if text.strip()}
-
-
-# -------- Hand-picked cases --------
-EXTRA_ALIASES: Dict[str, str] = {
-    "mf": "Miss Fortune",
-    "j4": "Jarvan IV",
-    "mundo": "Dr. Mundo",
-    "lb": "LeBlanc",
-    "kass": "Kassadin",
-    "cho": "Cho'Gath",
-    "kata": "Katarina",
-    "yi": "Master Yi",
-    "ww": "Warwick",
-    "voli": "Volibear",
-    "vlad": "Vladimir",
-    "morde": "Mordekaiser",
-    # apostrophe names common misspellings
-    "khazix": "Kha'Zix",
-    "velkoz": "Vel'Koz",
-    "kogmaw": "Kog'Maw",
-    "chogath": "Cho'Gath",
-}
-
-
-# -------- Build alias into og map --------
-def build_alias_map() -> Dict[str, str]:
-    canon = sorted(get_og_names())
-
-    # Filter obvious non-champion noise
-    DENY = {"Explore", "Runeterra", "The Void", "Freljord", "Noxus", "Zaun", "Piltover"}
-    canon = [c for c in canon if c not in DENY]
-
-    alias_to_og: Dict[str, str] = {}
-
-    # Always map cleaned keys back to the exact canonical name
-    for name in canon:
-        # og cleaned keys
-        alias_to_og[remove_apostrophes(name)] = name
-        alias_to_og[remove_space(name)] = name
-
-        # apostrophe-as-space variants
-        cleaned_with_apostrophes = keep_apostrophes(name)
-        if "'" in cleaned_with_apostrophes:
-            replace_apostrophe_w_space = re.sub(r"\s+", " ", cleaned_with_apostrophes.replace("'", " ")).strip()
-            if replace_apostrophe_w_space:
-                alias_to_og[replace_apostrophe_w_space] = name
-                if " " in replace_apostrophe_w_space:
-                    alias_to_og[replace_apostrophe_w_space.replace(" ", "-")] = name
-                    alias_to_og[replace_apostrophe_w_space.replace(" ", "_")] = name
-
-        # generated variants
-        for alias in variants_for(name):
-            alias_to_og[alias] = name
-
-    # Overlay extras
-    for alias, og_name in EXTRA_ALIASES.items():
-        alias_to_og[alias.strip().lower()] = og_name
-
-    return alias_to_og
-
+def build_formatted_to_exact_map(version: Optional[str] = None) -> Dict[str, str]:
+    """Return {FormattedPascalNoSpecial: ExactDDName}."""
+    exact_names = sorted(fetch_champion_names_from_ddragon(version=version))
+    return {dd_name_to_pascal_compact(n): n for n in exact_names}
 
 if __name__ == "__main__":
-    alias_map = build_alias_map()
-    print(f"aliases: {len(alias_map)} entries")
+    # Pin a version (e.g., "15.20.1") or use None for latest
+    mapping = build_formatted_to_exact_map(version="15.20.1")
+    mapping["MonkeyKing"] = "Wukong"
+    print(f"champions: {len(mapping)} entries\n")
 
-    # quick spot checks
-    samples = [
-        "velkoz", "vel koz", "vel-koz", "vel_koz",
-        "khazix", "kha zix", "jarvan 4", "jarvan4",
-        "missfortune", "dr mundo", "mf", "j4"
-    ]
-    for sample in samples:
-        print(f"{sample:12s} -> {alias_map.get(sample)}")
+    # Spot checks
+    for sample in ["K'Sante", "Jarvan IV", "Nunu & Willump", "Cho'Gath", "Kha'Zix", "LeBlanc", "Dr. Mundo"]:
+        key = dd_name_to_pascal_compact(sample)
+        print(f"{sample:16s} -> key='{key}' -> value='{mapping.get(key)}'")
 
     with open("champion_aliases.json", "w", encoding="utf-8") as f:
-        json.dump(alias_map, f, ensure_ascii=False, indent=2)
-    print("Wrote champion_aliases.json")
+        json.dump(mapping, f, ensure_ascii=False, indent=2)
+    print("\nWrote champion_aliases.json")
