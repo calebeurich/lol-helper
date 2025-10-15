@@ -2,15 +2,22 @@ import os, io, boto3, json, asyncio, functools, weakref
 import pandas as pd
 from pathlib import Path
 from botocore.config import Config
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import TypedDict, Optional, List, Dict, Any, Union, Sequence
 from langgraph.graph import StateGraph, START, END
 from dotenv import load_dotenv
 from io import StringIO
 from llm_integration.data_processing.user_data_compiling.data_collection import compile_user_data
-from data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
-from data_processing.recommender_system.rec_sys_functions import extract_vector
+from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
+from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector
 
-from config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
+from llm_integration.config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
+
+try:
+    from rapidfuzz import process, fuzz
+    _HAS_RAPIDFUZZ = True
+except Exception:
+    import difflib
+    _HAS_RAPIDFUZZ = False
 
 # ============================================================
 # Environment setup and Literals/Types
@@ -18,10 +25,10 @@ from config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIE
 PATCH = "patch_15_6"
 # In production these will need to be taken as inputs 
 CURRENT_PATCH = "15.6"
-patch_naming = f"patch_{CURRENT_PATCH.replace(".", "_")}"
+patch_naming = f"patch_{CURRENT_PATCH.replace('.', '_')}"
 PATCH_START_TIME = "1742342400" # March 19th, 2025 in timestamp seconds
 PATCH_END_TIME = "1743552000" # APRIL 4TH, 2025 in timestamp
-MINIMUM_GAMES = 10
+MINIMUM_GAMES = 1
 load_dotenv()
 # LLM bedrock variables
 MODEL_ID = os.getenv("CHATBOT_LLM_ID")  
@@ -39,12 +46,6 @@ OPTIMIZATION_SCOPE = ["CLUSTER", "ROLE"]
 ALL_CHAMPIONS = json.loads(
     (Path(__file__).resolve().parent / "config" / "champion_aliases.json").read_text(encoding="utf-8")
 )
-def get_processed_dataframe(role: str, req_type: str) -> pd.DataFrame:
-    """req_type = champion_residuals or clusters"""
-    key = f"{PREFIX}/clusters/{patch_naming}/{role.lower()}_{req_type}_df.csv"
-    s3  = boto3.client("s3", region_name=REGION, config=cfg)
-    obj = s3.get_object(Bucket=BUCKET, Key=key)
-    return pd.read_csv(io.BytesIO(obj["Body"].read()))
 # ============================================================
 # S3 DATA LOADING AND CACHING
 # ============================================================
@@ -53,70 +54,63 @@ class S3Paths:
     def __init__(self, role: str, patch = patch_naming):
         self.role = role
         self.paths = {
-            "champ_semantic_tags_and_desc": f"{PREFIX}/bedrock_output/{patch}/{role}_champion_semantic_tags_and_descriptions.csv",
-            "cluster_semantic_tags_and_desc": f"{PREFIX}/bedrock_output/{patch}/{role}_cluster_semantic_tags_and_descriptions.csv",
-            "champion_x_role_x_user_agg": f"{PREFIX}/champion_x_role_x_user/{patch}/champion_x_role_x_user_aggregated_data.csv",    
-            "champion_x_role_agg" : f"{PREFIX}/champion_x_role/{patch}/champion_x_role_x_user_aggregated_data.csv",
-            "champion_residuals ": f"{PREFIX}/clusters/{patch}/{role}_champion_residuals_df.csv",
-            "clusters ": f"{PREFIX}/clusters/{patch}/{role}_clusters_df.csv",
-            "counter_stats_dfs_by_role": f"{PREFIX}/counter_stats_dfs_by_role/{patch}/{role}/{role}_counter_stats.csv"
+            "champ_semantic_tags_and_desc": f"{PREFIX}/bedrock_output/{patch}/{role.lower()}_champion_semantic_tags_and_descriptions.parquet",
+            "cluster_semantic_tags_and_desc": f"{PREFIX}/bedrock_output/{patch}/{role.lower()}_cluster_semantic_tags_and_descriptions.parquet",
+            "champion_x_role_x_user_agg": f"{PREFIX}/champion_x_role_x_user/{patch}/{role.lower()}_champion_x_role_x_user_aggregated_data.parquet",    
+            "champion_x_role_agg": f"{PREFIX}/champion_x_role/{patch}/{role.lower()}_champion_x_role_aggregated_data.parquet",
+            "champion_residuals": f"{PREFIX}/clusters/{patch}/{role.lower()}_champion_residuals_df.parquet",
+            "clusters": f"{PREFIX}/clusters/{patch}/{role.lower()}_clusters_df.parquet",
+            "counter_stats_dfs_by_role": f"{PREFIX}/counter_stats_dfs_by_role/{patch}/{role.lower()}/{role.lower()}_counter_stats.parquet",
+            "items_dict": "data_mapping/item_id_tags.json"
         }
 
-class S3CSVCache: 
-    """Simple S3 CSV cache for multiple dataframes."""
+    def items(self):
+        return self.paths.items()
+
+class S3Cache: 
+    """Simple S3 parquet cache for multiple dataframes."""
     
     def __init__(self, bucket: str = BUCKET, region: str = REGION):
-
         self.bucket = bucket
-        self.cache = {}  # {champion_id: {data_type: df}}
-
+        self.cache = {}  # {role: {data_type: df}}
         self.s3 = boto3.client("s3", region_name=region, config=cfg)
     
-    def get_global_data(self, role: str, patch: str = patch_naming) -> Dict[str, pd.DataFrame]:
-        
-        # Check if we already have all data cached
+    def get_global_data(self, role: str, patch: str = patch_naming):
+        # Return if already cached
         if role in self.cache:
             return self.cache[role]
         
-        paths = S3Paths(role)
+        paths = S3Paths(role, patch)  # use the patch param
 
-        # Load all CSVs
         result = {}
         for data_type, s3_key in paths.items():
             try:
-                # Download from S3
                 response = self.s3.get_object(Bucket=self.bucket, Key=s3_key)
-                df = pd.read_csv(io.BytesIO(response["Body"].read()))
-                dict_df = df.to_dict(orient="records")
-                print(f"Loaded {s3_key}: {len(df)} rows")
-                result[data_type] = dict_df 
             except Exception as e:
                 print(f"Error loading {s3_key}: {e}")
                 result[data_type] = None
+                continue  # don't use an undefined response
+
+            if s3_key.endswith(".parquet"):
+                df = pd.read_parquet(io.BytesIO(response["Body"].read()))
+                print(f"Loaded DataFrame {s3_key}: {len(df)} rows")
+                result[data_type] = df
+            else:
+                data = json.load(io.BytesIO(response["Body"].read()))
+                print(f"Loaded Dict {s3_key}")
+                result[data_type] = data
         
-        # Cache all data for this champion
         self.cache[role] = result
-        
         return result
+
+    def get(self, role: str, data_type: str):
+        return self.cache.get(role).get(data_type)
     
-    def add_dict(self, role: str, payload: dict[str, Any]) -> None:
-        """Merge arbitrary dict into the role’s cache bucket."""
-        self.cache.setdefault(role, {}).update(payload)
-
-    def put(self, role: str, key: str, value: Any) -> None:
-        self.cache.setdefault(role, {})[key] = value
-
-    def get(self, role: str, key: str | None = None) -> Any:
-        bucket = self.cache.get(role, {})
-        return bucket if key is None else bucket.get(key)
-
-    def clear(self, role: str) -> None:
-        if role in self.cache:
-            del self.cache[role]
-            print(f"Cleared cache for {role}")
+    def put(self, role: str, key: str, value: Any):
+        self.cache.setdefault(role)[key] = value 
 
 # Initialize cache
-cache = S3CSVCache()
+cache = S3Cache()
 
 # ============================================================
 # LLM SETUP
@@ -154,11 +148,11 @@ class State(TypedDict, total=False):
     selection_criterion: Optional[str]
     user_champion: Optional[str]
     desired_sample: Optional[pd.DataFrame]
-    champion_row: Optional[dict]
+    user_vector: Optional[dict]
 
     # Data process tracking
-    s3_data_loaded = Optional[bool]
-    user_api_data_loaded = Optional[bool]
+    s3_data_loaded: Optional[bool]
+    user_api_data_loaded: Optional[bool]
 
 
 class RetryLimitExceeded(Exception):
@@ -180,22 +174,103 @@ def _norm(s: str) -> str:
     return " ".join(s.lower().strip().split())
 
 
+def _best_matches(user_text: str, choices: list[str], topn: int = 3):
+    """
+    Evaluate spelling closeness to choices
+    Uses RapidFuzz if available; otherwise difflib ratio in 0..100.
+    """
+    if _HAS_RAPIDFUZZ:
+        # token-based scorer
+        scores = []
+        for c in choices:
+            s1 = fuzz.WRatio(user_text, c)
+            s2 = fuzz.token_set_ratio(user_text, c)
+            scores.append((c, max(s1, s2)))
+        scores.sort(key=lambda t: t[1], reverse=True)
+        return scores[:topn]
+    else:
+        # difflib
+        candidates = difflib.get_close_matches(user_text, choices, n=topn, cutoff=0.0)
+        scores = []
+        for c in candidates:
+            score = difflib.SequenceMatcher(None, user_text, c).ratio() * 100.0
+            scores.append((c, score))
+        # pad with other choices if needed
+        if len(scores) < topn:
+            pool = [c for c in choices if c not in {x for x, _ in scores}]
+            for c in pool[: topn - len(scores)]:
+                score = difflib.SequenceMatcher(None, user_text, c).ratio() * 100.0
+                scores.append((c, score))
+        scores.sort(key=lambda t: t[1], reverse=True)
+        return scores[:topn]
+
 # Validate user inputs 
 def _choose_valid(
-    state: State, prompt: str, mapping: Dict[str, str], 
-    invalid_prompt: str, step: str
+    state: State,
+    prompt: str,
+    mapping: Union[Dict[str, str], Sequence[str]],
+    invalid_prompt: str,
+    step: str
 ) -> str:
-    
+    """
+    Supports:
+      - dict[str, str]: match on keys, return mapping[key]
+      - sequence[str]:  match on items, return the chosen item
+    """
+    # Build normalized lookup tables
+    if isinstance(mapping, dict):
+        # normalized key -> (display_key, return_value)
+        norm_to_pair = {_norm(k): (k, v) for k, v in mapping.items()}
+        choices_norm = list(norm_to_pair.keys())
+        display_from_norm = lambda nk: norm_to_pair[nk][0]
+        value_from_norm   = lambda nk: norm_to_pair[nk][1]
+    else:
+        # treat as list/tuple of choices
+        norm_to_val = {}
+        for item in mapping:
+            norm_to_val[_norm(item)] = item  
+        choices_norm = list(norm_to_val.keys())
+        display_from_norm = lambda nk: norm_to_val[nk]
+        value_from_norm   = lambda nk: norm_to_val[nk]
+
     tries = 3
-    user_input = ask_and_return(state, prompt)
+    first = True
     while tries > 0:
-        key = _norm(user_input)
-        if key in mapping:
-            return mapping[key] if isinstance(mapping, dict) else key
+        user_input = ask_and_return(state, prompt if first else invalid_prompt)
+        first = False
+        key_norm = _norm(user_input)
+
+        # exact normalized match
+        if key_norm in choices_norm:
+            return value_from_norm(key_norm)
+
+        # fuzzy suggestions over normalized choices
+        candidates = _best_matches(key_norm, choices_norm, topn=3)
+        if candidates:
+            best_norm, best_score = candidates[0]
+            second_score = candidates[1][1] if len(candidates) > 1 else 0.0
+
+            # confident auto-accept
+            if best_score >= 90 or (best_score >= 80 and (best_score - second_score) >= 5):
+                return value_from_norm(best_norm)
+
+            # disambiguate with top-3
+            options = [display_from_norm(nk) for nk, _ in candidates]
+            listing = "\n".join(f"{i+1}. {opt}" for i, opt in enumerate(options))
+            choice = ask_and_return(
+                state,
+                f"I found similar options. Which did you mean?\n{listing}\nType 1-{len(options)}, or retype your choice:"
+            )
+            if choice.isdigit():
+                idx = int(choice)
+                if 1 <= idx <= len(options):
+                    # map back through normalization to be consistent
+                    return options[idx - 1]
+            # else: loop again with invalid_prompt
+
         tries -= 1
-        if tries <= 0:
-            raise RetryLimitExceeded(step)
-        user_input = ask_and_return(state, invalid_prompt)
+
+    raise RetryLimitExceeded(step)
 
 # ============================================================
 # Nodes
@@ -247,38 +322,45 @@ def ask_use_own_data(state: State) -> State:
 
 
 # Conditional
-def find_valid_queues(state: State) -> State:
+def get_user_queue(state: State) -> State:
 
     if not state["use_own_data"]: # Skip process if not using user data
         return {}
 
     user_name = state["user_name"]
     user_tag_line = state["user_tag_line"]
-    role = state["role"].upper()
+    role = state["role"]
     # Consider caching compiled data
     try:
-        match_data_df, items_dict, user_puuid = compile_user_data(
-            user_name, user_tag_line, PATCH_START_TIME, PATCH_END_TIME, MINIMUM_GAMES, CURRENT_PATCH
+        match_data_df, user_puuid, num_games_per_queue = compile_user_data(
+            user_name, user_tag_line, PATCH_START_TIME, PATCH_END_TIME, CURRENT_PATCH
         )
     except InsufficientSampleError:
         return {"user_api_data_loaded" : "Insufficient total games"}
-    
-    merged_df, valid_queues, all_item_tags, all_summoner_spells = find_valid_queues(match_data_df, items_dict, role, MINIMUM_GAMES)
+    items_dict = cache.get(role, "items_dict")
+
+    merged_df, valid_queues, all_item_tags, all_summoner_spells = find_valid_queues(match_data_df, items_dict, user_puuid, role, MINIMUM_GAMES)
     cache.put(role=state["role"], key="all_item_tags", value=all_item_tags)
     cache.put(role=state["role"], key="all_summoner_spells", value=all_summoner_spells) 
 
+    valid_queues = list(valid_queues.keys())
     if valid_queues:
         user_queue_type = _choose_valid(
             state,
-            f"Say 'You have enough data for the following queue(s): {", ".join(valid_queues)}. Please select one.' exactly",
-            valid_queues, # Need to account for spelling mistakes
+            f"Say 'You have enough data for the following queue(s): {', '.join(valid_queues)}. Please select one.' exactly",
+            valid_queues, 
             "Say 'Please input a valid queue type' exactly",
             "compile_user_df"
         )
+        aggregated_df = aggregate_user_data(merged_df, all_item_tags, all_summoner_spells, user_queue_type, MINIMUM_GAMES)
+        aggregated_df.to_csv("TESTING_AGG_DF.csv")
+        cache.put(role=state["role"], key="user_api_df", value=aggregated_df)
+        return {"user_queue_type": user_queue_type, "user_api_data_loaded" : True, "valid_queues": valid_queues, "user_puuid": user_puuid}
+    
     else:
         key = _choose_valid(
             state,
-            f"Say 'The account `{user_name}` does not meet the minimum requirement of 10 games in this patch for the analysis, would you like to proceed using global data instead?' exactly",
+            f"Say 'The account `{user_name}` does not meet the minimum requirement of {MINIMUM_GAMES} games in this patch for the analysis, would you like to proceed using global data instead?' exactly",
             BINARY_REPLIES,
             "Say 'Please answer with yes or no' exactly",
             "compile_user_df"
@@ -287,93 +369,76 @@ def find_valid_queues(state: State) -> State:
             "use_own_data": False, "user_api_data_loaded" : "insufficient_total_games", "desired_sample": "champion_x_role_agg"
         } if key else {"dead_end": True}
 
-    user_df_dict = merged_df.to_dict(orient="records")
 
-    cache.put(role=state["role"], key="user_api_df", value=user_df_dict)
-
-    return {"user_queue_type": user_queue_type, "user_api_data_loaded" : True, "valid_queues": valid_queues, "user_puuid": user_puuid}
-
-
-def ask_selection_criterion(state: State) -> State: # Also compile_user_df?
+def compile_user_vector(state: State) -> State: # Also compile_user_df?
 
     def choose_champion(valid_champions):
         return _choose_valid(
             state,
-            f"Say 'The following champions have sufficient data, please select one: {", ".join(valid_champions)}' exactly",
+            f"Say 'The following champions have sufficient data, please select one: {', '.join(valid_champions)}' exactly",
             valid_champions,
             "Say 'Please input a valid champion name' exactly",
-            "ask_selection_criterion"
+            "compile_user_vector"
         )
 
-    user_queue_type = state["user_queue_type"]
-    data_loaded = state["user_api_data_loaded"]
     role = state["role"]
     dataset = state["desired_sample"]
-    user_puuid = state["user_puuid"]
 
     criterion = _choose_valid(
         state,
-        "Say 'We will select a representative champions to analyze. Choose a criterion: win rate, play rate, or choose one (min 10 games).' exactly",
+        f"Say 'We will select a representative champions to analyze. Choose a criterion: win rate, play rate, or manual selection (min {MINIMUM_GAMES} games).' exactly",
         CHAMPION_CRITERIA,
-        "Say 'Please input a valid option: win rate, play rate, or choose one' exactly",
-        "ask_selection_criterion"
+        "Say 'Please input a valid option: win rate, play rate, or choose a champion' exactly",
+        "compile_user_vector"
     )
 
     df = pd.DataFrame(cache.get(role, dataset))
-    if data_loaded:
-        all_item_tags = cache.get(role, "all_item_tags")
-        all_summoner_spells = cache.get(role, "all_summoner_spells")
-
-        df = aggregate_user_data(df, all_item_tags, all_summoner_spells, user_puuid, user_queue_type, MINIMUM_GAMES)
-
-    valid_champions = df["champion_name"].tolist()
-
-    valid_champions = [ALL_CHAMPIONS[champ_name] for champ_name in valid_champions]
 
     if criterion == "user_choice":
-        return {"user_champion": choose_champion(valid_champions), "selection_criterion": criterion}
+        valid_champions = df["champion_name"].tolist()
+        valid_champions = [ALL_CHAMPIONS[champ_name] for champ_name in valid_champions]
+        user_champion = choose_champion(valid_champions)
+        user_vector, _ = extract_vector(df, criterion, user_champion, MINIMUM_GAMES)
+
+    else:
+        user_vector_or_names, n = extract_vector(df, criterion, None, MINIMUM_GAMES)
+        if n > 1:
+            names = user_vector_or_names
+            chosen = _choose_valid(
+                state,
+                f"Say 'There are more than one champions meeting this criteria. Please choose one of the following: {', '.join(names)}' exactly",
+                names,
+                f"Say 'Please input a valid option: {', '.join(names)}' exactly",
+                "compile_user_vector"
+            )
+            user_vector = df.loc[df["champion_name"] == chosen].iloc[[0]]
+            user_champion = chosen
+        else:
+            user_vector = user_vector_or_names  
+            user_champion = user_vector.iloc[0]["champion_name"]
     
-    # Consider adding function to extract user vector here
+    print(user_vector)
 
-    return {
-        "selection_criterion": _choose_valid(
-        state,
-        "Say 'We will select a representative champions to analyze. Choose a criterion: win rate, play rate, or choose one (min 10 games).' exactly",
-        CHAMPION_CRITERIA,
-        "Say 'Please input a valid option: win rate, play rate, or choose one' exactly",
-        "ask_selection_criterion"
-        )
-    }
+    return {"user_champion": user_champion, "selection_criterion": criterion, "user_vector": user_vector}#.to_dict(orient="records")}
 
-# Maybe not conditional?
-def extract_user_vector(state: State) -> State:
-    criterion, role = state["selection_criterion"], state["role"]
-    user_name = state["user_name"]
+
+def check_dfs(state: State) -> State:
+    role = state["role"]
     
-    if state["user_api_data_loaded"] == True:
-        key = state["desired_sample"]
-    elif state["user_api_data_loaded"] == "Insufficient total games":
-        key = _choose_valid(
-            state,
-            f"Say 'The account `{user_name}` does not meet the minimum requirement of 10 games (ranked and draft combined) in this patch for the analysis, would you like to proceed using global data instead?' exactly",
-            BINARY_REPLIES,
-            "Say 'Please answer with yes or no' exactly",
-            "extract_user_vector"
-        )
-    df = cache.get(role, key)
+    global_df = pd.DataFrame(cache.get(role, "champion_x_role_agg"))
+    user_vector = state["user_vector"]
 
-    tries = 0
-    while tries < 3:
-        try:
-            user_vector = extract_vector(df, criterion, MINIMUM_GAMES)
-        except InsufficientSampleError as e:
-            print(e)
-            
+    # Columns in global_df that are not in user_vector
+    missing_in_user_vector = [c for c in global_df.columns if c not in user_vector.columns]
+    print("Missing in user_vector:", missing_in_user_vector)
 
-    return
+    # (optional) Columns in user_vector not in global_df
+    extra_in_user_vector = [c for c in user_vector.columns if c not in global_df.columns]
+    print("Extra in user_vector:", extra_in_user_vector)
 
-
-
+    # Check if column order is the same
+    same_order = list(global_df.columns) == list(user_vector.columns)
+    print("Same column order?", same_order)
 
 # ============================================================
 # Recommender System Functions
@@ -388,33 +453,26 @@ graph = StateGraph(State)
 graph.add_node("ask_role", ask_role)
 graph.add_node("load_and_cache_s3_data", load_and_cache_s3_data)
 graph.add_node("ask_use_own_data", ask_use_own_data)
-graph.add_node("ask_selection_criterion", ask_selection_criterion)
-graph.add_node("compile_user_df", compile_user_df)
-graph.add_node("extract_user_vector", extract_user_vector)
+graph.add_node("get_user_queue", get_user_queue)
+graph.add_node("compile_user_vector", compile_user_vector)
+graph.add_node("check_dfs", check_dfs)
+#graph.add_node("extract_user_vector", extract_user_vector)
 
 graph.add_edge(START, "ask_role")
-# Run in parallel so S3 data pull does not slow process down
 graph.add_edge("ask_role", "load_and_cache_s3_data") # Dead end
-graph.add_edge("ask_role", "ask_use_own_data")
-# Run in parallel with compile_user_df being conditional on use_own_data
-graph.add_edge("ask_use_own_data", "compile_user_df")
-graph.add_edge("ask_use_own_data", "ask_selection_criterion")
-# Merging parallel nodes
-graph.add_conditional_edges(
-    "compile_user_df",
-    lambda state: "go_end" if state.get("dead_end") else "skip_to_vector",
-    {"go_end": END, "skip_to_vector": "extract_user_vector"}
-)
-graph.add_edge("ask_selection_criterion", "extract_user_vector")
-
-
+graph.add_edge("load_and_cache_s3_data", "ask_use_own_data")
+# Run in parallel with compile_user_vector being conditional on use_own_data
 graph.add_conditional_edges(
     "ask_use_own_data",
-    lambda state: "go_queue_type" if state.get("use_own_data") else "skip_to_champion",
-    {"go_queue_type": "ask_queue_and_user_info", "skip_to_champion": "ask_champion_criterion"}
+    lambda state: "go_queue" if state.get("use_own_data") else "skip_to_vector",
+    {"go_queue": "get_user_queue", "skip_to_vector": "compile_user_vector"}
 )
-graph.add_edge("ask_queue_and_user_info", "ask_champion_criterion")
-graph.add_edge("ask_champion_criterion", END)
+graph.add_conditional_edges(
+    "get_user_queue",
+    lambda state: "go_vector" if not state.get("dead_end") else "end",
+    {"go_vector": "compile_user_vector", "end": END}
+)
+graph.add_edge("compile_user_vector", "check_dfs")
 app = graph.compile()
 g = app.get_graph()
 g.print_ascii()

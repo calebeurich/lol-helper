@@ -3,9 +3,9 @@ import boto3
 from typing import Dict, List, Set, Tuple, Any
 from urllib.parse import urlparse
 from pyspark.sql import SparkSession, DataFrame, Window
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StringType
 from pyspark.sql import functions as F
-from enum import Enum
 
 RANKED_SOLO_DUO_QUEUE_ID = 420
 DEFAULT_PARTITIONS = 100
@@ -190,7 +190,6 @@ def create_matches_df(
     csv_file_path_or_user_df: str,
     npartitions: int = DEFAULT_PARTITIONS,
     queue_id: int = 420,
-    single_user_flag = False
 ) -> Tuple[DataFrame, DataFrame]:
     """
     Load and process match data from CSV containing JSON strings into structured DataFrames.
@@ -260,19 +259,16 @@ def create_matches_df(
     """
 
     # ========== Extract df From All CSV Files ==========
-    if not single_user_flag:
-        raw_df = (
-            spark.read
-                .option("header", True)
-                .option("multiLine", True)
-                .option("escape", "\"")
-                .option("quote", "\"")
-                .csv(f"file://{csv_file_path_or_user_df}/*.csv")
-        )
-        sampling_ratio = 0.2
-    else:
-        raw_df = csv_file_path_or_user_df
-        sampling_ratio = 1
+    raw_df = (
+        spark.read
+            .option("header", True)
+            .option("multiLine", True)
+            .option("escape", "\"")
+            .option("quote", "\"")
+            .csv(f"file://{csv_file_path_or_user_df}/*.csv")
+    )
+    sampling_ratio = 0.2
+
 
     # ========== Filtering by Current Patch ==========
     # Drop "Patch Error" rows, repartition & cache
@@ -337,6 +333,7 @@ def create_matches_df(
     json_rdd.unpersist()
 
     return participants_df, teams_df
+
 
 def get_items_dict_from_s3(
     s3_uri: str,
@@ -655,10 +652,6 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
     elif granularity == "champion_x_role_x_user":
         grouping = ["champion_id", "champion_name","team_position", "puuid"]
         window = Window.partitionBy("puuid", "champion_id")
-    elif granularity == "single_user":
-        merged_df = merged_df.filter(merged_df.puuid == single_user_puuid)
-        grouping = ["champion_id", "champion_name","team_position"]
-        window = Window.partitionBy("champion_id")
     else:
         raise ValueError("Incorrect granularity input, must be 'champion_x_role', 'champion_x_role_x_user' or 'single_user'")        
 
@@ -1037,14 +1030,27 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
         )
     )
 
-    final_df = intermediate_df
+    master_agg_df = intermediate_df
     for tag in all_item_tags:
-        final_df = final_df.withColumn(
+        master_agg_df = master_agg_df.withColumn(
             f"pct_of_matches_with_{tag}",
             F.col(f"avg_{tag}_count") * 100 / F.col("avg_items_completed")
         ).drop(f"avg_{tag}_count")
     
-    return final_df
+    if "team_position" not in master_agg_df.columns:
+        raise KeyError("Column 'team_position' not found in DataFrame")
+
+    # Cluster data by team_position to speed subsequent filters
+    master_agg_df = master_agg_df.repartition(len(ALL_TEAM_POSITIONS), "team_position")
+
+    master_agg_df = master_agg_df.persist(StorageLevel.MEMORY_AND_DISK)  # cache the shuffled parent
+    _ = master_agg_df.count()  # (optional) materialize now, so downstream filters don't recompute
+
+    agg_dfs_by_role: Dict[str, DataFrame] = {}
+    for role in ALL_TEAM_POSITIONS:
+        agg_dfs_by_role[role.lower()] = master_agg_df.filter(F.col("team_position") == role)
+
+    return agg_dfs_by_role
         
 
 def derive_counter_stats(
@@ -1109,15 +1115,12 @@ def main_aggregator(
     spark: SparkSession,
     csv_file_path_or_user_df: str,
     items_json_path: str,
-    single_user_flag: bool = False,
-    single_user_puuid: str = None,
     desired_queue_id: int = 420
 ) -> DataFrame:
     
     participants_df, teams_df = create_matches_df(
         spark=spark, csv_file_path_or_user_df=csv_file_path_or_user_df,
-        npartitions=DEFAULT_PARTITIONS, queue_id=desired_queue_id, 
-        single_user_flag=single_user_flag
+        npartitions=DEFAULT_PARTITIONS, queue_id=desired_queue_id
     )
 
     # Create an indicator column for games where champion had a dragon takedown, and subsequent columns with the timing of first dragon takedown
@@ -1142,33 +1145,21 @@ def main_aggregator(
         how = "left"
     )
 
-    if single_user_flag:
-        single_user_df = aggregate_champion_data(
-            merged_df, 
-            all_item_tags, 
-            all_summoner_spells, 
-            "single_user",
-            single_user_puuid
-        )
+    counter_stats_cols = ["match_id", "team_position", "champion_name", "win", "team_id"]
+    raw_counter_stats_df = merged_df[counter_stats_cols].drop_duplicates(subset=counter_stats_cols)
+    counter_stats_dfs_by_role = derive_counter_stats(raw_counter_stats_df)
 
-        return single_user_df
+    champion_x_role_dfs = aggregate_champion_data(
+        merged_df, 
+        all_item_tags, 
+        all_summoner_spells, 
+        granularity="champion_x_role"
+    )
+    champion_x_role_x_user_dfs = aggregate_champion_data(
+        merged_df, 
+        all_item_tags, 
+        all_summoner_spells, 
+        granularity="champion_x_role_x_user"
+    )
 
-    else:
-        counter_stats_cols = ["match_id", "team_position", "champion_name", "win", "team_id"]
-        raw_counter_stats_df = merged_df[counter_stats_cols].drop_duplicates(subset=counter_stats_cols)
-        counter_stats_dfs_by_role = derive_counter_stats(raw_counter_stats_df)
-
-        champion_x_role_df = aggregate_champion_data(
-            merged_df, 
-            all_item_tags, 
-            all_summoner_spells, 
-            granularity="champion_x_role"
-        )
-        champion_x_role_x_user_df = aggregate_champion_data(
-            merged_df, 
-            all_item_tags, 
-            all_summoner_spells, 
-            granularity="champion_x_role_x_user"
-        )
-
-        return champion_x_role_df, champion_x_role_x_user_df, counter_stats_dfs_by_role
+    return champion_x_role_dfs, champion_x_role_x_user_dfs, counter_stats_dfs_by_role

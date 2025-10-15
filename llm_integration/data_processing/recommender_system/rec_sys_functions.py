@@ -1,25 +1,36 @@
 from typing import Dict, List, Set, Tuple, Optional
-from data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
+from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
 import pandas as pd
 import numpy as np
 
-queue_map = {"draft":[400], "ranked_solo_queue":[420], "ranked_including_flex":[420,440]}
 
-def find_available_champions(df: pd.DataFrame, queue_type: str):
-    filtered_df = df[df["queue_id"].isin(queue_map[queue_type])].copy() if queue_type.isin(queue_map) else df.copy()
+def extract_vector(df, criterion, chosen_champion, minimum_games):
 
-def extract_vector(df: pd.DataFrame, criterion: str, minimum_games: int):
-    if criterion not in {"win_rate", "role_play_rate"}:
-        filtered_row = df[df["champion_name"] == criterion]
+    if criterion == "user_choice":
+        filtered_row = df.loc[df["champion_name"] == chosen_champion]
+        if filtered_row.empty:
+            raise KeyError(f"No rows found for champion name {chosen_champion}")
+        if len(filtered_row) > 1:
+            raise ValueError(f"Data validity issue, more than one row for champion {chosen_champion}")
+        return filtered_row, 1
+
+    elif criterion in {"win_rate", "role_play_rate"}:
+        candidates = df.loc[df["total_games_per_champion"] >= minimum_games]
+        if candidates.empty:
+            raise InsufficientSampleError("champion games for your desired criterion or champion")
+        # include ties
+        try:
+            filtered_row = candidates.nlargest(1, criterion, keep="all")
+        except TypeError:
+            max_val = candidates[criterion].max()
+            filtered_row = candidates.loc[candidates[criterion] == max_val]
     else:
-        filtered_row = df.iloc[df[criterion].idxmax()]
+        raise ValueError("Invalid criterion")
 
-    if filtered_row.empty or int(filtered_row["total_games_played_in_role"]) < minimum_games:
-        raise InsufficientSampleError("champion games for your desired criterion or champion")
-    
-    if len(filtered_row) > 1:
-        # This shouldn't happen if champions per role are unique
-        raise ValueError(f"Data integrity issue: Multiple rows with champion_name: {criterion}")
-    
-    return filtered_row.iloc[0] # Convert to dict in chatbot code
+    n = len(filtered_row)
+    if n > 1:
+        # return names for disambiguation
+        return filtered_row["champion_name"].tolist(), n
+
+    return filtered_row, n
 

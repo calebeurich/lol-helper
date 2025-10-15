@@ -1,4 +1,4 @@
-from data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
+from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
 from dotenv import load_dotenv
 from functools import lru_cache
 import pandas as pd
@@ -78,8 +78,9 @@ def get_match_ids(
 ) -> pd.DataFrame:
     
     ranked_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=420&start=0&count={matches_per_summoner}"
+    ranked_flex_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=440&start=0&count={matches_per_summoner}"
     draft_api_url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?startTime={patch_start_time}&endTime={patch_end_time}&queue=400&start=0&count={matches_per_summoner}"
-    queue_url_map = {ranked_api_url:"ranked", draft_api_url:"draft"}
+    queue_url_map = {ranked_api_url:"ranked", ranked_flex_api_url:"ranked_flex", draft_api_url:"draft"}
 
     api_calls = 0
     start_time = time.time()
@@ -139,7 +140,6 @@ def get_match_data(match_history_df: pd.DataFrame, current_patch: str):
     match_data_df = pd.DataFrame(columns=["puuid", "match_id", "match_data"])
     rows = []
 
-    match_history_df.to_csv("match_history.csv")
     # iterate directly over the match_id column, not iterrows()
     for row in match_history_df.itertuples(index=False):
 
@@ -181,10 +181,4 @@ def compile_user_data(user_name, user_tag_line, patch_start_time, patch_end_time
 
     match_data_df = get_match_data(match_history_df, current_patch)
 
-    try:
-        with open("item_id_tags.json", "r") as f:
-            items_dict = json.load(f)
-    except FileNotFoundError:
-        print("Items dict json not found")
-
-    return match_data_df, items_dict, puuid, num_games_per_queue
+    return match_data_df, puuid, num_games_per_queue

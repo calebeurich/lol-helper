@@ -1,14 +1,14 @@
 ROLES = {
-    "top":"top",
+    "top":"TOP",
 
-    "jungle":"jungle", "jg":"jungle", "jung":"jungle","jgl":"jungle",
+    "jungle":"JUNGLE", "jg":"JUNGLE", "jung":"JUNGLE","jgl":"JUNGLE",
 
-    "middle":"middle","mid":"middle", 
+    "middle":"MIDDLE","mid":"MIDDLE", 
 
-    "bottom":"bottom", "bot":"bottom", "adc":"bottom", 
-    "adcarry":"bottom", "ad carry":"bottom", "ad_carry":"bottom",
+    "bottom":"BOTTOM", "bot":"BOTTOM", "adc":"BOTTOM", 
+    "adcarry":"BOTTOM", "ad carry":"BOTTOM", "ad_carry":"BOTTOM",
 
-    "support":"utility", "supp":"utility", "sup":"utility"
+    "support":"UTILITY", "supp":"UTILITY", "sup":"UTILITY", "utility": "UTILITY"
 }
 
 BINARY_REPLIES = {
@@ -26,6 +26,6 @@ QUEUES = {
 CHAMPION_CRITERIA = {
     "win_rate": "win_rate", "win rate": "win_rate", "winrate": "win_rate", "wr": "win_rate", "win": "win_rate",
     "play rate": "role_play_rate", "play_rate": "role_play_rate", "playrate": "role_play_rate", "play": "role_play_rate",
-    "choose one": "user_choice", "choose": "user_choice", "chooseone": "user_choice", "choice": "user_choice"
+    "manual selection": "user_choice", "manual": "user_choice", "manualselection": "user_choice", "selection": "user_choice"
 }
 

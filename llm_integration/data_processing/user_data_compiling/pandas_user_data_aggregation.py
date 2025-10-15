@@ -72,7 +72,7 @@ def create_matches_df(
     raw_master_df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
-    valid_queue_id = [400, 420, 440]
+    valid_queue_ids = [400, 420, 440]
 
     # Parse all JSON at once
     match_data_col = raw_master_df["match_data"]#.apply(json.loads)
@@ -80,7 +80,7 @@ def create_matches_df(
     # Filter for desired matches
     filtered_df = raw_master_df.copy()
     filtered_df["queue_id"] = match_data_col.map(lambda x: x["info"]["queue_id"])
-    filtered_df = filtered_df[filtered_df["queue_id"].isin(valid_queue_id)].copy()
+    filtered_df = filtered_df[filtered_df["queue_id"].isin(valid_queue_ids)].copy()
 
     if filtered_df.empty:
         raise InsufficientSampleError("games played for this queue type and/or patch") 
@@ -90,9 +90,9 @@ def create_matches_df(
     filtered_df["match_id"] = match_data_col.loc[filtered_df.index].map(lambda x: x["metadata"]["match_id"])
 
     # Create participants_df, one row per participant
-    exploded_participants = filtered_df[["match_id", "participants"]].explode("participants", ignore_index=True)
+    exploded_participants = filtered_df[["match_id", "queue_id","participants"]].explode("participants", ignore_index=True)
     normalized_participants = pd.json_normalize(exploded_participants["participants"], sep="_")
-    participants_df = pd.concat([exploded_participants[["match_id"]], normalized_participants], axis=1)
+    participants_df = pd.concat([exploded_participants[["match_id", "queue_id"]], normalized_participants], axis=1)
 
     # Create teams_df, one row per team, two rows per match
     exploded_teams = filtered_df[["match_id", "teams"]].explode("teams", ignore_index=True)
@@ -265,7 +265,8 @@ def extract_fields_with_exclusions(
 
 def valid_champions_by_queue(merged_df: pd.DataFrame, minimum_games: int):
     queue_map = {"draft":400,"ranked":420, "flex":440}
-    
+    merged_df = merged_df[merged_df["queue_id"].isin(queue_map.values())]
+
     games_by_queue = (
         merged_df
         .groupby(["champion_name", "queue_id"])
@@ -273,7 +274,7 @@ def valid_champions_by_queue(merged_df: pd.DataFrame, minimum_games: int):
         .rename("games_played")
         .reset_index()
     )
-    total_games = (
+    all_queues = (
         merged_df
         .groupby("champion_name")
         .size()
@@ -293,15 +294,15 @@ def valid_champions_by_queue(merged_df: pd.DataFrame, minimum_games: int):
         (games_by_queue["games_played"] >= minimum_games),
         "champion_name"
     ].unique().tolist()
-    
+
     draft = games_by_queue.loc[
         (games_by_queue["queue_id"] == queue_map["draft"]) &
         (games_by_queue["games_played"] >= minimum_games),
         "champion_name"
     ].unique().tolist()
-    
-    total = total_games.loc[
-        total_games["games_played"] >= minimum_games,
+
+    all_games = all_queues.loc[
+        all_queues["games_played"] >= minimum_games,
         "champion_name"
     ].unique().tolist()
 
@@ -309,18 +310,18 @@ def valid_champions_by_queue(merged_df: pd.DataFrame, minimum_games: int):
         "Ranked Solo Queue": solo_ranked,
         "Ranked Including Flex": all_ranked,
         "Draft": draft,
-        "All Queues": total
+        "All Queues": all_games
     }
 
     filtered_dict = {k: v for k, v in valid_champions_dict.items() if len(v) > 0}
 
     return filtered_dict
 
-def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type): 
-    queue_map = {"draft":["400"], "ranked_solo_queue":["420"], "ranked_including_flex":["420","440"]}
+def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, queue_type): 
+    queue_map = {"draft":[400], "ranked_solo_queue":[420], "ranked_including_flex":[420, 440]}
     
     allowed = queue_map.get(queue_type)
-    merged_df = merged_df.loc[merged_df["puuid"] == user_puuid].copy()
+
     if allowed is not None:
         merged_df = merged_df.loc[merged_df["queue_id"].isin(allowed)].copy()
 
@@ -353,7 +354,7 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
         avg_kill_participation     = ("challenges_kill_participation", "mean"),
         avg_takedowns              = ("challenges_takedowns", "mean"),
 
-        total_wins = ("win", lambda s: (s.astype("Int64").fillna(0) * 100).sum()),
+        total_wins = ("win", lambda s: (s.astype("Int64").fillna(0)).sum()),
 
         # damage dealt stats
         # keep as sum (Spark comment: derive % later because of NULLs)
@@ -694,33 +695,37 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
     
     new_columns = {
         "role_play_rate": (
-            (intermediate_df["total_games_played_in_role"].astype("Float64")).mul(100)
-            .div(intermediate_df["total_games_per_champion"].astype("Float64"))
-            .where(intermediate_df["total_games_per_champion"].ne(0))
+            (intermediate_df["total_games_per_champion"].astype("Float64")).mul(100)
+            .div(intermediate_df["total_games_per_champion"].sum())
+            .round(4)
         ),
 
         "pct_of_games_with_highest_damage_dealt": (
             (intermediate_df["sum_of_games_with_highest_damage_dealt"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .round(4)
         ),
 
         "pct_of_games_with_highest_crowd_control_score": (
             (intermediate_df["sum_of_games_with_highest_crowd_control_score"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .round(4)
         ),
         # Change name to pct when we change spark
         "total_games_completed_supp_quest_first": (
             (intermediate_df["sum_of_games_completed_supp_quest_first"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .round(4)
         ),
 
         "pct_of_games_with_highest_wards_killed": (
             (intermediate_df["sum_of_games_with_highest_wards_killed"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .round(4)
         ),
 
         "kda": (
@@ -728,23 +733,27 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_
             .add(intermediate_df["avg_assists"].astype("Float64"))
             .div(intermediate_df["avg_deaths"].astype("Float64")))
             .where(intermediate_df["avg_deaths"].ne(0))
+            .round(4)
         ),
 
         "win_rate": (
             (intermediate_df["total_wins"].astype("Float64")).mul(100)
-            .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
-            .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .div(intermediate_df["total_games_per_champion"].astype("Float64"))
+            .where(intermediate_df["total_games_per_champion"].ne(0))
+            .round(4)
         ),
 
         "avg_cs": (
             (intermediate_df["avg_minions_killed"]).astype("Float64")
             .add(intermediate_df["avg_jungle_monsters_cs"]).astype("Float64")
+            .round(4)
         ),
 
         "pct_games_first_to_complete_item": (
             (intermediate_df["total_games_fastest_item_completion"].astype("Float64")).mul(100)
             .div(intermediate_df["total_games_played_in_role"].astype("Float64"))
             .where(intermediate_df["total_games_played_in_role"].ne(0))
+            .round(4)
         )
     }
 
@@ -850,6 +859,7 @@ Finally, match_data will be dropped
 def find_valid_queues(
     raw_master_df: pd.DataFrame,
     items_dict: dict,
+    user_puuid: str,
     role: str,
     minimum_games: int
 ) -> pd.DataFrame:
@@ -873,15 +883,17 @@ def find_valid_queues(
         how="left",
     )
 
-    merged_df = merged_df[merged_df["team_position"] == role]
+    merged_df = merged_df[
+        (merged_df["team_position"] == role) & (merged_df["puuid"] == user_puuid)
+    ]
 
     valid_queues = valid_champions_by_queue(merged_df, minimum_games)
     
     return merged_df, valid_queues, all_item_tags, all_summoner_spells
 
-def aggregate_user_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type, minimum_games):
+def aggregate_user_data(merged_df, all_item_tags, all_summoner_spells, queue_type, minimum_games):
 
-    single_user_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, user_puuid, queue_type)
+    single_user_df = aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, queue_type)
     filtered_df = single_user_df[single_user_df["total_games_played_in_role"] >= minimum_games]
 
     return filtered_df
