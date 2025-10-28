@@ -47,7 +47,7 @@ jungle_specific_features = ["pct_of_matches_with_jungle", "avg_kills_early_jungl
 ## Excluded from jg
 laners_specific_features = ["avg_kills_on_other_lanes_early_as_laner", "avg_times_had_early_takedowns_in_all_lanes_as_laner",
                             "pct_of_games_indiv_killed_1st_tower", "pct_of_games_team_took_first_dragon", "pct_of_games_had_drag_takedown",
-                            "pct_of_matches_with_mana", "avg_vision_score_advantage_over_lane_opponent",]
+                            "pct_of_matches_with_mana", "avg_vision_score_advantage_over_lane_opponent", "pct_of_matches_with_lane"]
 
 top_exclude_features = [
     "pct_of_matches_with_magic_penetration", "percent_of_games_with_fully_stacked_mejais", "pct_of_matches_with_lane", 

@@ -29,3 +29,4 @@ CHAMPION_CRITERIA = {
     "manual selection": "user_choice", "manual": "user_choice", "manualselection": "user_choice", "selection": "user_choice"
 }
 
+

@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 from io import StringIO
 from llm_integration.data_processing.user_data_compiling.data_collection import compile_user_data
 from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
-from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector
+from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector, filter_user_and_global_dfs, similar_playstyle_users, recommend_champions_from_main
 
-from llm_integration.config.alias_mapping import ROLES, QUEUES, CHAMPION_CRITERIA, BINARY_REPLIES
+from llm_integration.config.alias_mapping import ROLES, CHAMPION_CRITERIA, BINARY_REPLIES
 
 try:
     from rapidfuzz import process, fuzz
@@ -28,7 +28,10 @@ CURRENT_PATCH = "15.6"
 patch_naming = f"patch_{CURRENT_PATCH.replace('.', '_')}"
 PATCH_START_TIME = "1742342400" # March 19th, 2025 in timestamp seconds
 PATCH_END_TIME = "1743552000" # APRIL 4TH, 2025 in timestamp
+
 MINIMUM_GAMES = 1
+TOP_K = 3 # Number of recommended champions
+
 load_dotenv()
 # LLM bedrock variables
 MODEL_ID = os.getenv("CHATBOT_LLM_ID")  
@@ -150,6 +153,9 @@ class State(TypedDict, total=False):
     desired_sample: Optional[pd.DataFrame]
     user_vector: Optional[dict]
 
+    similar_playstyle_rec: Optional[list]
+    same_main_rec: Optional[list]
+
     # Data process tracking
     s3_data_loaded: Optional[bool]
     user_api_data_loaded: Optional[bool]
@@ -180,12 +186,20 @@ def _best_matches(user_text: str, choices: list[str], topn: int = 3):
     Uses RapidFuzz if available; otherwise difflib ratio in 0..100.
     """
     if _HAS_RAPIDFUZZ:
-        # token-based scorer
         scores = []
         for c in choices:
-            s1 = fuzz.WRatio(user_text, c)
-            s2 = fuzz.token_set_ratio(user_text, c)
-            scores.append((c, max(s1, s2)))
+            # Use simple ratio for better character-level matching
+            s1 = fuzz.ratio(user_text, c)
+            
+            # Only use token-based for longer strings where it makes sense
+            if len(user_text) > 6 and len(c) > 6:
+                s2 = fuzz.WRatio(user_text, c)
+                s3 = fuzz.token_set_ratio(user_text, c)
+                scores.append((c, max(s1, s2, s3)))
+            else:
+                # For short strings, just use simple ratio
+                scores.append((c, s1))
+                
         scores.sort(key=lambda t: t[1], reverse=True)
         return scores[:topn]
     else:
@@ -219,13 +233,13 @@ def _choose_valid(
     """
     # Build normalized lookup tables
     if isinstance(mapping, dict):
-        # normalized key -> (display_key, return_value)
+        # Normalized key -> (display_key, return_value)
         norm_to_pair = {_norm(k): (k, v) for k, v in mapping.items()}
         choices_norm = list(norm_to_pair.keys())
         display_from_norm = lambda nk: norm_to_pair[nk][0]
         value_from_norm   = lambda nk: norm_to_pair[nk][1]
     else:
-        # treat as list/tuple of choices
+        # Treat as list/tuple of choices
         norm_to_val = {}
         for item in mapping:
             norm_to_val[_norm(item)] = item  
@@ -244,15 +258,44 @@ def _choose_valid(
         if key_norm in choices_norm:
             return value_from_norm(key_norm)
 
+        # Check for exact prefix matches first (handles "hwei" -> "Hwei" perfectly)
+        prefix_matches = [c for c in choices_norm if c.startswith(key_norm)]
+        if len(prefix_matches) == 1:
+            return value_from_norm(prefix_matches[0])
+
         # fuzzy suggestions over normalized choices
         candidates = _best_matches(key_norm, choices_norm, topn=3)
         if candidates:
             best_norm, best_score = candidates[0]
             second_score = candidates[1][1] if len(candidates) > 1 else 0.0
 
-            # confident auto-accept
-            if best_score >= 90 or (best_score >= 80 and (best_score - second_score) >= 5):
+            # For short strings (like champion names), be much stricter
+            if len(key_norm) <= 6:  # Short input
+                # Check if first two characters match
+                first_chars_match = (len(key_norm) >= 2 and len(best_norm) >= 2 and 
+                                   key_norm[:2] == best_norm[:2])
+                
+                if first_chars_match:
+                    # More lenient if prefix matches
+                    min_score = 85
+                    min_gap = 10
+                else:
+                    # Very strict if prefix doesn't match
+                    min_score = 95
+                    min_gap = 15
+            else:
+                # Original thresholds for longer strings
+                min_score = 90
+                min_gap = 5
+
+            # Auto-accept with dynamic thresholds
+            if best_score >= min_score or (best_score >= (min_score - 10) and (best_score - second_score) >= min_gap):
                 return value_from_norm(best_norm)
+
+            # Don't offer disambiguation for poor matches
+            if best_score < 70:
+                tries -= 1
+                continue
 
             # disambiguate with top-3
             options = [display_from_norm(nk) for nk, _ in candidates]
@@ -266,7 +309,6 @@ def _choose_valid(
                 if 1 <= idx <= len(options):
                     # map back through normalization to be consistent
                     return options[idx - 1]
-            # else: loop again with invalid_prompt
 
         tries -= 1
 
@@ -298,7 +340,7 @@ def load_and_cache_s3_data(state: State) -> State:
 def ask_use_own_data(state: State) -> State:
     use_own_data = _choose_valid(
             state,
-            "Say 'Do you wish to use your own data (yes/no)? A minimum of 10 games (any Summoner's Rift queue) with at least 1 champion in the desired patch is required' exactly",
+            f"Say 'Do you wish to use your own data (yes/no)? A minimum of {MINIMUM_GAMES} games (any Summoner's Rift queue) with at least 1 champion in the desired patch is required' exactly",
             BINARY_REPLIES,
             "Say 'Please answer with yes or no' exactly",
             "ask_use_own_data"
@@ -336,7 +378,17 @@ def get_user_queue(state: State) -> State:
             user_name, user_tag_line, PATCH_START_TIME, PATCH_END_TIME, CURRENT_PATCH
         )
     except InsufficientSampleError:
-        return {"user_api_data_loaded" : "Insufficient total games"}
+        key = _choose_valid(
+            state,
+            f"Say 'The account `{user_name}` does not meet the minimum requirement of {MINIMUM_GAMES} games in this patch for the analysis, would you like to proceed using global data instead?' exactly",
+            BINARY_REPLIES,
+            "Say 'Please answer with yes or no' exactly",
+            "compile_user_df"
+        )
+        return {
+            "use_own_data": False, "user_api_data_loaded" : "insufficient_total_games", "desired_sample": "champion_x_role_agg"
+        } if key else {"dead_end": True}
+    
     items_dict = cache.get(role, "items_dict")
 
     merged_df, valid_queues, all_item_tags, all_summoner_spells = find_valid_queues(match_data_df, items_dict, user_puuid, role, MINIMUM_GAMES)
@@ -417,7 +469,6 @@ def compile_user_vector(state: State) -> State: # Also compile_user_df?
             user_vector = user_vector_or_names  
             user_champion = user_vector.iloc[0]["champion_name"]
     
-    print(user_vector)
 
     return {"user_champion": user_champion, "selection_criterion": criterion, "user_vector": user_vector}#.to_dict(orient="records")}
 
@@ -425,8 +476,10 @@ def compile_user_vector(state: State) -> State: # Also compile_user_df?
 def check_dfs(state: State) -> State:
     role = state["role"]
     
-    global_df = pd.DataFrame(cache.get(role, "champion_x_role_agg"))
+    global_df = pd.DataFrame(cache.get(role, "champion_x_role_x_user_agg"))
     user_vector = state["user_vector"]
+
+    user_vector, global_df = compare_with_users(role, user_vector, global_df)
 
     # Columns in global_df that are not in user_vector
     missing_in_user_vector = [c for c in global_df.columns if c not in user_vector.columns]
@@ -439,6 +492,21 @@ def check_dfs(state: State) -> State:
     # Check if column order is the same
     same_order = list(global_df.columns) == list(user_vector.columns)
     print("Same column order?", same_order)
+
+
+def compare_with_users(state: State) -> State:
+    role = state["role"]
+    user_champion = state["user_champion"]
+    global_users_df = pd.DataFrame(cache.get(role, "champion_x_role_x_user_agg"))
+    user_vector = state["user_vector"]
+
+    filtered_user_vector, filtered_global_user_df = filter_user_and_global_dfs(role, user_vector, global_users_df, MINIMUM_GAMES)
+    similar_playstyle_rec = similar_playstyle_users(filtered_user_vector, filtered_global_user_df, TOP_K)
+    same_main_rec = recommend_champions_from_main(user_champion, filtered_global_user_df, TOP_K)
+    print(f"similar_playstyle_rec: {similar_playstyle_rec}")
+    print(f"same_main_rec: {same_main_rec}")
+
+    return {"similar_playstyle_rec":similar_playstyle_rec, "same_main_rec":same_main_rec}
 
 # ============================================================
 # Recommender System Functions
@@ -455,7 +523,7 @@ graph.add_node("load_and_cache_s3_data", load_and_cache_s3_data)
 graph.add_node("ask_use_own_data", ask_use_own_data)
 graph.add_node("get_user_queue", get_user_queue)
 graph.add_node("compile_user_vector", compile_user_vector)
-graph.add_node("check_dfs", check_dfs)
+graph.add_node("compare_with_users", compare_with_users)
 #graph.add_node("extract_user_vector", extract_user_vector)
 
 graph.add_edge(START, "ask_role")
@@ -472,7 +540,7 @@ graph.add_conditional_edges(
     lambda state: "go_vector" if not state.get("dead_end") else "end",
     {"go_vector": "compile_user_vector", "end": END}
 )
-graph.add_edge("compile_user_vector", "check_dfs")
+graph.add_edge("compile_user_vector", "compare_with_users")
 app = graph.compile()
 g = app.get_graph()
 g.print_ascii()

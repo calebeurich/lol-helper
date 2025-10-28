@@ -958,31 +958,6 @@ def aggregate_champion_data(merged_df, all_item_tags, all_summoner_spells, granu
             F.avg("challenges.outer_turret_executes_before10_minutes").alias("avg_outer_turret_executes_before_10m"),
             F.avg("challenges.takedowns_in_enemy_fountain").alias("avg_takedowns_in_enemy_fountain"),
 
-            # Position/Role - find aggregation key word for most common string -> DATA VALIDATION
-            F.sort_array(
-                F.collect_list("individual_position")
-            )[0].alias("mode_individual_position"),
-
-            F.sort_array(
-                F.collect_list("lane")
-            )[0].alias("mode_lane"),
-
-            F.sort_array(
-                F.collect_list("role")
-            )[0].alias("mode_role"),
-
-            #F.sort_array(
-                #F.collect_list("team_position")
-            #)[0].alias("mode_team_position"),
-
-            # CONSIDER EXPLORATORY FEATURE ANALYSIS TO EVALUATE
-
-            ##### Had to use alternate methor as SageMaker does not support Spark 3.4, which is where F.mode was added
-            #F.mode("individual_position").alias("mode_individual_position"), # Best guess for which position the player actually played in isolation of anything else
-            #F.mode("lane").alias("mode_lane"), # Gives slightly different string than above, might have something to do with where champ spent most of the time
-            #F.mode("role").alias("mode_role"),
-            #F.mode("team_position").alias("mode_team_position"), # The teamPosition is the best guess for which position the player actually played if we add the constraint that each team must have one top player, one jungle, one middle, etc
-            
             F.sum(F.col("challenges.played_champ_select_position").cast("int")).alias("pct_of_games_played_champ_select_position") # only present if no roleswap - seems useless
         )
         .withColumn(
