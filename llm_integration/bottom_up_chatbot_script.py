@@ -10,7 +10,7 @@ from llm_integration.data_processing.user_data_compiling.data_collection import 
 from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
 from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector, filter_user_and_global_dfs, similar_playstyle_users, recommend_champions_from_main
 
-from llm_integration.config.alias_mapping import ROLES, CHAMPION_CRITERIA, BINARY_REPLIES
+from llm_integration.config.alias_mapping import ROLES, CHAMPION_CRITERIA, BINARY_REPLIES, METHODOLOGIES
 
 try:
     from rapidfuzz import process, fuzz
@@ -152,6 +152,12 @@ class State(TypedDict, total=False):
     user_champion: Optional[str]
     desired_sample: Optional[pd.DataFrame]
     user_vector: Optional[dict]
+    decision_making_method: Optional[str]
+    champion_description: Optional[str]
+    champion_tags: Optional[str]
+    cluster_description : Optional[str]
+    cluster_tags : Optional[str]
+    cluster_id: Optional[str]
 
     similar_playstyle_rec: Optional[list]
     same_main_rec: Optional[list]
@@ -473,7 +479,7 @@ def compile_user_vector(state: State) -> State: # Also compile_user_df?
     return {"user_champion": user_champion, "selection_criterion": criterion, "user_vector": user_vector}#.to_dict(orient="records")}
 
 
-def check_dfs(state: State) -> State:
+def check_dfs(state: State) -> State: # Temporary function to compare df columns, delete later
     role = state["role"]
     
     global_df = pd.DataFrame(cache.get(role, "champion_x_role_x_user_agg"))
@@ -494,7 +500,19 @@ def check_dfs(state: State) -> State:
     print("Same column order?", same_order)
 
 
-def compare_with_users(state: State) -> State:
+def decision_making_method(state: State) -> State:
+    return {
+        "decision_making_method":_choose_valid(
+        state,
+        f"Say 'We will now begin the recommendation analysis. Please choose one of the following methodologies: {', '.join(METHODOLOGIES)}' exactly",
+        METHODOLOGIES,
+        f"Say 'Please input a valid option: {', '.join(METHODOLOGIES)}' exactly",
+        "decision_making_method"
+        )
+    }
+
+
+def collaborative_filtering(state: State) -> State:
     role = state["role"]
     user_champion = state["user_champion"]
     global_users_df = pd.DataFrame(cache.get(role, "champion_x_role_x_user_agg"))
@@ -508,6 +526,87 @@ def compare_with_users(state: State) -> State:
 
     return {"similar_playstyle_rec":similar_playstyle_rec, "same_main_rec":same_main_rec}
 
+
+def pull_tags_and_descriptions(state: State) -> State:
+    role = state["role"]
+    user_champion = state["user_champion"]
+
+    champions_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
+    champion_description, champion_tags = champions_df.loc[
+        champions_df["id"] == f"{user_champion}__{role}", ["description", "tags"]
+    ].squeeze()
+
+    _ = _choose_valid( # Placeholder, should be replaced with button on front end
+        state,
+        f"""Say 'The champion {user_champion} has the following tags:
+        {champion_tags}
+        And the following description:
+        {champion_description}' exactly.
+        Please type Continue when ready.""",
+        ["Continue"],
+        "Say 'Please type Continue' exactly",
+        "compile_user_df"
+    )
+
+    cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
+    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals_df"))
+    cluster_id = champion_residuals_df.loc[
+        champion_residuals_df["champion_name"] == user_champion, ["cluster"]
+    ].squeeze()
+    cluster_description, cluster_tags = champions_df.loc[
+        cluster_df["id"] == cluster_id, ["description", "tags"]
+    ].squeeze()
+
+    _ = _choose_valid( # Placeholder, should be replaced with button on front end
+        state,
+        f"""Say 'The champion {user_champion} belongs to the cluster with the following tags:
+        {cluster_tags}
+        And the following description:
+        {cluster_description}' exactly.
+        Please type Continue when ready.""",
+        ["Continue"],
+        "Say 'Please type Continue' exactly",
+        "compile_user_df"
+    )
+
+    return {
+        "champion_description": champion_description, "champion_tags": champion_tags,
+        "cluster_description": cluster_description, "cluster_tags": cluster_tags,
+        "cluster_id": cluster_id
+    }
+
+
+def mathematical_optimization(state: State) -> State:
+    role = state["role"]
+    cluster_id = state["cluster_id"]
+    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals_df"))
+    scope = _choose_valid(
+        state,
+        f"Say 'Do we want to stay within cluster scope or look at whole role' exactly",
+        {"Within cluster": "cluster_scope", "Whole role": "role_scope"},
+        f"Say 'Please input a valid option: {', '.join(["Within cluster", "Whole role"])}' exactly",
+        "mathematical_optimization"
+    )
+    
+    filtered_residuals_df = champion_residuals_df.loc[
+            champion_residuals_df["cluster"] == cluster_id
+    ] if scope == "cluster_scope" else champion_residuals_df
+
+    win_rate = _choose_valid(
+        state,
+        f"Say 'Do we want to round your champion pool based on win rate?' exactly",
+        BINARY_REPLIES,
+        f"Say 'Please answer with yes or no' exactly",
+        "mathematical_optimization"
+    )
+    # Continue with win rate analysis and alternative 
+
+def natural_language_exploration(state: State) -> State:
+    return
+#global_users_df = pd.DataFrame(cache.get(role, "champion_residuals"))
+
+#global_users_df = pd.DataFrame(cache.get(role, "clusters"))
+    
 # ============================================================
 # Recommender System Functions
 # ============================================================
@@ -523,7 +622,11 @@ graph.add_node("load_and_cache_s3_data", load_and_cache_s3_data)
 graph.add_node("ask_use_own_data", ask_use_own_data)
 graph.add_node("get_user_queue", get_user_queue)
 graph.add_node("compile_user_vector", compile_user_vector)
-graph.add_node("compare_with_users", compare_with_users)
+graph.add_node("pull_tags_and_descriptions", pull_tags_and_descriptions)
+graph.add_node("decision_making_method", decision_making_method)
+graph.add_node("collaborative_filtering", collaborative_filtering)
+graph.add_node("mathematical_optimization", mathematical_optimization)
+graph.add_node("natural_language_exploration", natural_language_exploration)
 #graph.add_node("extract_user_vector", extract_user_vector)
 
 graph.add_edge(START, "ask_role")
@@ -540,7 +643,17 @@ graph.add_conditional_edges(
     lambda state: "go_vector" if not state.get("dead_end") else "end",
     {"go_vector": "compile_user_vector", "end": END}
 )
-graph.add_edge("compile_user_vector", "compare_with_users")
+graph.add_edge("compile_user_vector", "pull_tags_and_descriptions")
+graph.add_edge("pull_tags_and_descriptions", "decision_making_method")
+graph.add_conditional_edges(
+    "decision_making_method",
+    lambda state: state.get("decision_making_method"),
+    {
+        "collaborative_filtering": "collaborative_filtering", 
+        "mathematical_optimization": "mathematical_optimization", 
+        "natural_language_exploration": "natural_language_exploration"
+    }
+)
 app = graph.compile()
 g = app.get_graph()
 g.print_ascii()

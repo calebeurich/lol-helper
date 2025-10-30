@@ -29,4 +29,8 @@ CHAMPION_CRITERIA = {
     "manual selection": "user_choice", "manual": "user_choice", "manualselection": "user_choice", "selection": "user_choice"
 }
 
-
+METHODOLOGIES = {
+    "Compare with similar players": "collaborative_filtering",
+    "Champion pool optimization": "mathematical_optimization",
+    "Qualitative exploration": "natural_language_exploration"
+}
