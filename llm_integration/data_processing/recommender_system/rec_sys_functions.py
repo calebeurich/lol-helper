@@ -1,7 +1,7 @@
 from typing import Dict, List, Set, Tuple, Optional
 from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import InsufficientSampleError
 from clustering.champion_x_role_clustering_script import ROLE_CONFIG, labels, raw_clustering_features
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity, cosine_distances
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
@@ -191,5 +191,42 @@ def recommend_champions_from_main(user_champion, global_users_df, top_k=3):
         .index
         .tolist()
     )
+
+
+def find_best_alternative(df, user_champion, minimum_games=10):
+    
+    filtered_df = df[df["number_of_games"] >= minimum_games].copy()
+    wr_matrix = filtered_df.pivot(index="champion_name", columns="opp_champion_name", values="win_rate")
+    # Normalize with z-scores to remove outlier bias and meta strength bias
+    wr_matrix = (wr_matrix - wr_matrix.mean(axis=1).values[:, None]) / wr_matrix.std(axis=1).values[:, None]
+    # Ensure all champions appear in rows and columns
+    champions = sorted(set(wr_matrix.index) | set(wr_matrix.columns))
+    wr_matrix = wr_matrix.reindex(index=champions, columns=champions)
+    # Make it symmetric using reverse values when missing
+    wr_matrix = wr_matrix.combine_first(wr_matrix.T)
+    # Compute cosine distance
+    user_vector = wr_matrix.loc[user_champion].values.reshape(1, -1) # Convert series into 2D row vector
+    cosine_dist_scores = cosine_distances(user_vector, wr_matrix.values)[0]
+
+    alternatives = pd.Series(cosine_dist_scores, index=wr_matrix.index)
+    alternatives = alternatives.drop(user_champion).sort_values(ascending=False)
+
+    return alternatives.head(3).tolist()
+
+
+def find_recs_within_cluster(df, user_champion):
+
+    user_vector = df.loc[user_champion].values.reshape(1, -1)
+    
+    sim_scores = cosine_similarity(user_vector, df.fillna(0).values)[0]
+    similar_champs = pd.Series(sim_scores, index=df.index)
+    similar_champs = similar_champs.drop(user_champion).sort_values(ascending=False).head(3).tolist()
+
+    cosine_dist_scores = cosine_distances(user_vector, df.values)[0]
+    different_champs = pd.Series(cosine_dist_scores, index=df.index)
+    different_champs = different_champs.drop(user_champion).sort_values(ascending=False).head(3).tolist()
+
+    return similar_champs, different_champs
+    
 
 

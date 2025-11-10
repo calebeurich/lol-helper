@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from io import StringIO
 from llm_integration.data_processing.user_data_compiling.data_collection import compile_user_data
 from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
-from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector, filter_user_and_global_dfs, similar_playstyle_users, recommend_champions_from_main
+from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector, filter_user_and_global_dfs, similar_playstyle_users, recommend_champions_from_main, find_best_alternative, find_recs_within_cluster
 
 from llm_integration.config.alias_mapping import ROLES, CHAMPION_CRITERIA, BINARY_REPLIES, METHODOLOGIES
 
@@ -165,6 +165,9 @@ class State(TypedDict, total=False):
     # Data process tracking
     s3_data_loaded: Optional[bool]
     user_api_data_loaded: Optional[bool]
+    
+    final_rec: Optional[Sequence]
+    end: Optional[bool]
 
 
 class RetryLimitExceeded(Exception):
@@ -523,8 +526,15 @@ def collaborative_filtering(state: State) -> State:
     same_main_rec = recommend_champions_from_main(user_champion, filtered_global_user_df, TOP_K)
     print(f"similar_playstyle_rec: {similar_playstyle_rec}")
     print(f"same_main_rec: {same_main_rec}")
+    recommendation = {
+        "similiar playstyle": similar_playstyle_rec,
+        "same mains": same_main_rec                
+    }
 
-    return {"similar_playstyle_rec":similar_playstyle_rec, "same_main_rec":same_main_rec}
+    return {
+        "similar_playstyle_rec": similar_playstyle_rec, "same_main_rec":same_main_rec, 
+            "end": True, "final_rec": recommendation
+        }
 
 
 def pull_tags_and_descriptions(state: State) -> State:
@@ -577,8 +587,10 @@ def pull_tags_and_descriptions(state: State) -> State:
 
 
 def mathematical_optimization(state: State) -> State:
+
     role = state["role"]
     cluster_id = state["cluster_id"]
+    user_champion = state["user_champion"]
     champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals_df"))
     scope = _choose_valid(
         state,
@@ -587,7 +599,7 @@ def mathematical_optimization(state: State) -> State:
         f"Say 'Please input a valid option: {', '.join(["Within cluster", "Whole role"])}' exactly",
         "mathematical_optimization"
     )
-    
+
     filtered_residuals_df = champion_residuals_df.loc[
             champion_residuals_df["cluster"] == cluster_id
     ] if scope == "cluster_scope" else champion_residuals_df
@@ -599,7 +611,20 @@ def mathematical_optimization(state: State) -> State:
         f"Say 'Please answer with yes or no' exactly",
         "mathematical_optimization"
     )
-    # Continue with win rate analysis and alternative 
+    if win_rate:
+        counter_stats_df = pd.DataFrame(cache.get(role, "counter_stats_dfs_by_role"))
+        if scope == "cluster_scope":
+            counter_stats_df = counter_stats_df.loc[counter_stats_df["champion_name"].isin(filtered_residuals_df["champion_name"])]
+        recommendation = find_best_alternative(counter_stats_df, user_champion, MINIMUM_GAMES)
+        print(recommendation)
+        return {"end": True, "final_rec": recommendation}
+    
+    else:
+        similar_champs, different_champs = find_recs_within_cluster(filtered_residuals_df, user_champion)
+        return {
+            "end": True, "final_rec": {"similar":similar_champs, "different":different_champs}
+        }
+
 
 def natural_language_exploration(state: State) -> State:
     return
@@ -654,6 +679,8 @@ graph.add_conditional_edges(
         "natural_language_exploration": "natural_language_exploration"
     }
 )
+graph.add_edge("collaborative_filtering", END)
+graph.add_edge("mathematical_optimization", END)
 app = graph.compile()
 g = app.get_graph()
 g.print_ascii()
