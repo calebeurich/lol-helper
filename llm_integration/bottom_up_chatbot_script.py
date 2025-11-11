@@ -482,37 +482,67 @@ def compile_user_vector(state: State) -> State: # Also compile_user_df?
     return {"user_champion": user_champion, "selection_criterion": criterion, "user_vector": user_vector}#.to_dict(orient="records")}
 
 
-def check_dfs(state: State) -> State: # Temporary function to compare df columns, delete later
+def pull_tags_and_descriptions(state: State) -> State:
     role = state["role"]
-    
-    global_df = pd.DataFrame(cache.get(role, "champion_x_role_x_user_agg"))
-    user_vector = state["user_vector"]
+    user_champion = state["user_champion"]
 
-    user_vector, global_df = compare_with_users(role, user_vector, global_df)
+    champions_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
+    champion_description, champion_tags = champions_df.loc[
+        champions_df["id"] == f"{user_champion}__{role}", ["description", "tags"]
+    ].squeeze()
 
-    # Columns in global_df that are not in user_vector
-    missing_in_user_vector = [c for c in global_df.columns if c not in user_vector.columns]
-    print("Missing in user_vector:", missing_in_user_vector)
+    _ = _choose_valid( # Placeholder, should be replaced with button on front end
+        state,
+        f"""Say 'The champion {user_champion} has the following tags:
+        {champion_tags}
+        And the following description:
+        {champion_description}' exactly.
+        Please type Continue when ready.""",
+        ["Continue"],
+        "Say 'Please type Continue' exactly",
+        "compile_user_df"
+    )
 
-    # (optional) Columns in user_vector not in global_df
-    extra_in_user_vector = [c for c in user_vector.columns if c not in global_df.columns]
-    print("Extra in user_vector:", extra_in_user_vector)
+    cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
+    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals"))
+    print(champion_residuals_df.columns.tolist())
+    cluster_id = champion_residuals_df.loc[
+        champion_residuals_df["champion_name"] == user_champion, ["cluster"]
+    ].squeeze()
+    cluster_description, cluster_tags = cluster_df.loc[
+        cluster_df["id"] == cluster_id, ["description", "tags"]
+    ].squeeze()
 
-    # Check if column order is the same
-    same_order = list(global_df.columns) == list(user_vector.columns)
-    print("Same column order?", same_order)
+    _ = _choose_valid( # Placeholder, should be replaced with button on front end
+        state,
+        f"""Say 'The champion {user_champion} belongs to the cluster with the following tags:
+        {cluster_tags}
+        And the following description:
+        {cluster_description}.
+        Please type Continue when ready' exactly.""",
+        ["Continue"],
+        "Say 'Please type Continue' exactly",
+        "compile_user_df"
+    )
+
+    return {
+        "champion_description": champion_description, "champion_tags": champion_tags,
+        "cluster_description": cluster_description, "cluster_tags": cluster_tags,
+        "cluster_id": cluster_id
+    }
 
 
 def decision_making_method(state: State) -> State:
-    return {
-        "decision_making_method":_choose_valid(
+    
+    user_choice = _choose_valid(
         state,
         f"Say 'We will now begin the recommendation analysis. Please choose one of the following methodologies: {', '.join(METHODOLOGIES)}' exactly",
         METHODOLOGIES,
         f"Say 'Please input a valid option: {', '.join(METHODOLOGIES)}' exactly",
         "decision_making_method"
-        )
-    }
+    )
+    
+    return {"decision_making_method": user_choice}
 
 
 def collaborative_filtering(state: State) -> State:
@@ -536,67 +566,17 @@ def collaborative_filtering(state: State) -> State:
             "end": True, "final_rec": recommendation
         }
 
-
-def pull_tags_and_descriptions(state: State) -> State:
-    role = state["role"]
-    user_champion = state["user_champion"]
-
-    champions_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
-    champion_description, champion_tags = champions_df.loc[
-        champions_df["id"] == f"{user_champion}__{role}", ["description", "tags"]
-    ].squeeze()
-
-    _ = _choose_valid( # Placeholder, should be replaced with button on front end
-        state,
-        f"""Say 'The champion {user_champion} has the following tags:
-        {champion_tags}
-        And the following description:
-        {champion_description}' exactly.
-        Please type Continue when ready.""",
-        ["Continue"],
-        "Say 'Please type Continue' exactly",
-        "compile_user_df"
-    )
-
-    cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
-    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals_df"))
-    cluster_id = champion_residuals_df.loc[
-        champion_residuals_df["champion_name"] == user_champion, ["cluster"]
-    ].squeeze()
-    cluster_description, cluster_tags = champions_df.loc[
-        cluster_df["id"] == cluster_id, ["description", "tags"]
-    ].squeeze()
-
-    _ = _choose_valid( # Placeholder, should be replaced with button on front end
-        state,
-        f"""Say 'The champion {user_champion} belongs to the cluster with the following tags:
-        {cluster_tags}
-        And the following description:
-        {cluster_description}' exactly.
-        Please type Continue when ready.""",
-        ["Continue"],
-        "Say 'Please type Continue' exactly",
-        "compile_user_df"
-    )
-
-    return {
-        "champion_description": champion_description, "champion_tags": champion_tags,
-        "cluster_description": cluster_description, "cluster_tags": cluster_tags,
-        "cluster_id": cluster_id
-    }
-
-
 def mathematical_optimization(state: State) -> State:
 
     role = state["role"]
     cluster_id = state["cluster_id"]
     user_champion = state["user_champion"]
-    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals_df"))
+    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals"))
     scope = _choose_valid(
         state,
         f"Say 'Do we want to stay within cluster scope or look at whole role' exactly",
         {"Within cluster": "cluster_scope", "Whole role": "role_scope"},
-        f"Say 'Please input a valid option: {', '.join(["Within cluster", "Whole role"])}' exactly",
+        f"Say 'Please input a valid option: {', '.join(['Within cluster', 'Whole role'])}' exactly",
         "mathematical_optimization"
     )
 

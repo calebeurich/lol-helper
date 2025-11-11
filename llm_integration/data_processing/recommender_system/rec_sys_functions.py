@@ -204,14 +204,15 @@ def find_best_alternative(df, user_champion, minimum_games=10):
     wr_matrix = wr_matrix.reindex(index=champions, columns=champions)
     # Make it symmetric using reverse values when missing
     wr_matrix = wr_matrix.combine_first(wr_matrix.T)
+    wr_matrix = wr_matrix.fillna(0) # Replace NaN with 0 to remove from analysis
     # Compute cosine distance
     user_vector = wr_matrix.loc[user_champion].values.reshape(1, -1) # Convert series into 2D row vector
     cosine_dist_scores = cosine_distances(user_vector, wr_matrix.values)[0]
 
-    alternatives = pd.Series(cosine_dist_scores, index=wr_matrix.index)
-    alternatives = alternatives.drop(user_champion).sort_values(ascending=False)
+    differences = pd.Series(cosine_dist_scores, index=wr_matrix.index)
+    differences = differences.drop(user_champion).sort_values(ascending=False)
 
-    return alternatives.head(3).tolist()
+    return differences.head(3).index.tolist()
 
 
 def find_recs_within_cluster(df, user_champion):
