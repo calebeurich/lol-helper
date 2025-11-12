@@ -217,15 +217,22 @@ def find_best_alternative(df, user_champion, minimum_games=10):
 
 def find_recs_within_cluster(df, user_champion):
 
+    df = (df
+            .set_index("champion_name")
+            .drop(
+              columns=["team_position", "champion_id", "mode_individual_position", "mode_lane", "mode_role"], errors="ignore" # Remove mode columns in prod
+            )
+            .fillna(0)
+        )
     user_vector = df.loc[user_champion].values.reshape(1, -1)
     
     sim_scores = cosine_similarity(user_vector, df.fillna(0).values)[0]
     similar_champs = pd.Series(sim_scores, index=df.index)
-    similar_champs = similar_champs.drop(user_champion).sort_values(ascending=False).head(3).tolist()
+    similar_champs = similar_champs.drop(user_champion).sort_values(ascending=False).head(3).index.tolist()
 
     cosine_dist_scores = cosine_distances(user_vector, df.values)[0]
     different_champs = pd.Series(cosine_dist_scores, index=df.index)
-    different_champs = different_champs.drop(user_champion).sort_values(ascending=False).head(3).tolist()
+    different_champs = different_champs.drop(user_champion).sort_values(ascending=False).head(3).index.tolist()
 
     return similar_champs, different_champs
     

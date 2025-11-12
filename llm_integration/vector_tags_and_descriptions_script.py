@@ -117,7 +117,7 @@ def extract_top_pairs(row: pd.Series, prefix: str, k: int = 10) -> List[Tuple[st
 def make_items_for_role(role: str, cluster_df: pd.DataFrame, champ_df: pd.DataFrame) -> Tuple[List[dict], List[dict]]:
     cluster_items, champ_items = [], []
     for _, row in cluster_df.iterrows():
-        idx = str(row["cluster"])
+        idx = str(row.index)
         strengths = extract_top_pairs(row, "strength", 10)
         weaknesses = extract_top_pairs(row, "weakness", 10)
         cluster_items.append({
@@ -128,7 +128,7 @@ def make_items_for_role(role: str, cluster_df: pd.DataFrame, champ_df: pd.DataFr
             "weaknesses": weaknesses,
         })
     for _, row in champ_df.iterrows():
-        cid = str(row["champion_name"]) + "__" + str(row["team_position"])
+        cid = str(row.index) + "__" + str(role)
         strengths = extract_top_pairs(row, "strength", 10)
         weaknesses = extract_top_pairs(row, "weakness", 10)
         champ_items.append({
@@ -212,10 +212,10 @@ def run_labelling(
 # ---- S3 load ----
 def get_processed_dataframe(role: str, req_type: str) -> pd.DataFrame:
     """req_type = champion_residuals or clusters"""
-    key = f"{PREFIX}/clusters/{PATCH}/{role.lower()}_{req_type}_df.csv"
+    key = f"{PREFIX}/clusters/{PATCH}/{role.lower()}_{req_type}_df.parquet"
     s3  = boto3.client("s3", region_name=REGION, config=cfg)
     obj = s3.get_object(Bucket=BUCKET, Key=key)
-    return pd.read_csv(io.BytesIO(obj["Body"].read()))
+    return pd.read_parquet(io.BytesIO(obj["Body"].read()))
 
 
 def main(roles: list):
@@ -229,13 +229,15 @@ def main(roles: list):
         champion_dfs = {role.upper() : champion_df}
 
         # Just for S3 file integrity checks and debugging
-        cluster_dfs[role.upper()].to_csv("s3_cluster_test.csv")
-        champion_dfs[role.upper()].to_csv("s3_champion_test.csv")
+        cluster_dfs[role.upper()].to_parquet("s3_cluster_test.parquet")
+        champion_dfs[role.upper()].to_parquet("s3_champion_test.parquet")
 
         cluster_results, champion_results = run_labelling(cluster_dfs, champion_dfs, max_total_tokens_approx = MAX_TOTAL_TOKENS_APPROX, batch_size= BATCH_SIZE, desired_roles = [role])
-        
-        cluster_results[role.upper()].to_csv(f"{role.lower()}_cluster_semantic_tags_and_descriptions.csv")
-        champion_results[role.upper()].to_csv(f"{role.lower()}_champion_semantic_tags_and_descriptions.csv")
+        cluster_results[role.upper()]["id"] = cluster_results[role.upper()]["id"].str.extract('(\d+)')[0].astype(int) + 1
+        cluster_results[role.upper()].set_index("id", inplace=True) 
+
+        cluster_results[role.upper()].to_parquet(f"{role.lower()}_cluster_semantic_tags_and_descriptions.parquet")
+        champion_results[role.upper()].to_parquet(f"{role.lower()}_champion_semantic_tags_and_descriptions.parquet")
 
 if __name__ == "__main__":
-    main(["UTILITY"])
+    main(["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"])

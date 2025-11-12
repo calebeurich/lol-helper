@@ -414,7 +414,6 @@ def get_user_queue(state: State) -> State:
             "compile_user_df"
         )
         aggregated_df = aggregate_user_data(merged_df, all_item_tags, all_summoner_spells, user_queue_type, MINIMUM_GAMES)
-        aggregated_df.to_csv("TESTING_AGG_DF.csv")
         cache.put(role=state["role"], key="user_api_df", value=aggregated_df)
         return {"user_queue_type": user_queue_type, "user_api_data_loaded" : True, "valid_queues": valid_queues, "user_puuid": user_puuid}
     
@@ -572,6 +571,7 @@ def mathematical_optimization(state: State) -> State:
     cluster_id = state["cluster_id"]
     user_champion = state["user_champion"]
     champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals"))
+
     scope = _choose_valid(
         state,
         f"Say 'Do we want to stay within cluster scope or look at whole role' exactly",
@@ -583,6 +583,8 @@ def mathematical_optimization(state: State) -> State:
     filtered_residuals_df = champion_residuals_df.loc[
             champion_residuals_df["cluster"] == cluster_id
     ] if scope == "cluster_scope" else champion_residuals_df
+    
+    cache.put(role=state["role"], key="filtered_residuals_df", value=filtered_residuals_df)
 
     win_rate = _choose_valid(
         state,
@@ -593,6 +595,7 @@ def mathematical_optimization(state: State) -> State:
     )
     if win_rate:
         counter_stats_df = pd.DataFrame(cache.get(role, "counter_stats_dfs_by_role"))
+
         if scope == "cluster_scope":
             counter_stats_df = counter_stats_df.loc[counter_stats_df["champion_name"].isin(filtered_residuals_df["champion_name"])]
         recommendation = find_best_alternative(counter_stats_df, user_champion, MINIMUM_GAMES)
@@ -600,13 +603,28 @@ def mathematical_optimization(state: State) -> State:
         return {"end": True, "final_rec": recommendation}
     
     else:
-        similar_champs, different_champs = find_recs_within_cluster(filtered_residuals_df, user_champion)
+        champion_x_role_df = pd.DataFrame(cache.get(role, "champion_x_role_agg"))
+        champion_x_role_df = champion_x_role_df[champion_x_role_df["champion_name"].isin(filtered_residuals_df["champion_name"])]
+        similar_champs, different_champs = find_recs_within_cluster(champion_x_role_df, user_champion)
         return {
             "end": True, "final_rec": {"similar":similar_champs, "different":different_champs}
         }
 
 
 def natural_language_exploration(state: State) -> State:
+    role = state["role"]
+    cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
+    cluster_df["id"] = cluster_df["id"] + 1
+    print(f"Please find all {role.capitalize()} clusters with their descriptions and semantic tags below:")
+    print(cluster_df)
+
+    cluster_id = _choose_valid(
+        state,
+        f"Ask user to select the cluster id of the cluster they preferred",
+        cluster_df["id"].tolist(),
+        f"Say 'Please select a valid cluster id' exactly",
+        "cluster_selection"
+    )
     return
 #global_users_df = pd.DataFrame(cache.get(role, "champion_residuals"))
 

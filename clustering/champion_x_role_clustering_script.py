@@ -274,14 +274,14 @@ ROLE_CONFIG = {
 
 def get_processed_dataframe() -> pd.DataFrame:
 
-    key = f"{PROCESSED_DATA_FOLDER}/champion_x_role/{PATCH}/champion_x_role_aggregated_data.csv"
+    key = f"{PROCESSED_DATA_FOLDER}/champion_x_role/{PATCH}/champion_x_role_aggregated_data.parquet"
 
     # Pull the object
     s3 = boto3.client("s3")
     obj = s3.get_object(Bucket=BUCKET, Key=key)
 
     # Read it straight into pandas
-    champion_x_role_df = pd.read_csv(io.BytesIO(obj["Body"].read()))
+    champion_x_role_df = pd.read_parquet(io.BytesIO(obj["Body"].read()))
 
     return champion_x_role_df
 
@@ -460,6 +460,10 @@ def cluster_and_vectors(df: pd.DataFrame, n_clusters: int = 8, random_state: int
     champions_residuals_df = strengths_weaknesses_wide(champions_residuals_df, k=10)
     champions_residuals_df.insert(0, "cluster", labels)
 
+    # Formatting cluster ids for UI
+    champions_residuals_df["cluster"] = champions_residuals_df["cluster"] + 1
+    cluster_strengths_weaknesses_df.index = cluster_strengths_weaknesses_df.index + 1 
+
     # Merge both dfs and return
     #role_vectors_df = pd.merge(champions_vec_df.reset_index(), cluster_vec_df, "left", "cluster").set_index(label_cols)
 
@@ -468,8 +472,8 @@ def cluster_and_vectors(df: pd.DataFrame, n_clusters: int = 8, random_state: int
 
 def save_latest_s3fs(cluster_strengths_weaknesses_df, champions_residuals_df, role):
     prefix = f"s3://{BUCKET}/{PROCESSED_DATA_FOLDER}/clusters/{PATCH}"
-    cluster_strengths_weaknesses_df.to_csv(f"{prefix}/{role.lower()}_clusters_df.csv", index=True)
-    champions_residuals_df.to_csv(f"{prefix}/{role.lower()}_champion_residuals_df.csv", index=True)
+    cluster_strengths_weaknesses_df.to_parquet(f"{prefix}/{role.lower()}_clusters_df.parquet", index=True)
+    champions_residuals_df.to_parquet(f"{prefix}/{role.lower()}_champion_residuals_df.parquet", index=True)
 
 
 def main():
