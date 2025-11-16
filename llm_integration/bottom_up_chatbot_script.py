@@ -1,27 +1,61 @@
-import os, io, boto3, json, asyncio, functools, weakref
-import pandas as pd
+# ──────────────────────────────────────────
+# Standard Library Imports
+# ──────────────────────────────────────────
+import io
+import json
+import os
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, TypedDict, Union
+
+# ──────────────────────────────────────────
+# Third-Party Imports
+# ──────────────────────────────────────────
+import boto3
+import pandas as pd
 from botocore.config import Config
-from typing import TypedDict, Optional, List, Dict, Any, Union, Sequence
-from langgraph.graph import StateGraph, START, END
 from dotenv import load_dotenv
-from io import StringIO
-from llm_integration.data_processing.user_data_compiling.data_collection import compile_user_data
-from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import find_valid_queues, aggregate_user_data, InsufficientSampleError
-from llm_integration.data_processing.recommender_system.rec_sys_functions import extract_vector, filter_user_and_global_dfs, similar_playstyle_users, recommend_champions_from_main, find_best_alternative, find_recs_within_cluster
+from langgraph.graph import END, START, StateGraph
 
-from llm_integration.config.alias_mapping import ROLES, CHAMPION_CRITERIA, BINARY_REPLIES, METHODOLOGIES
+# ──────────────────────────────────────────
+# Local Application Imports
+# ──────────────────────────────────────────
+from llm_integration.config.alias_mapping import (
+    BINARY_REPLIES,
+    CHAMPION_CRITERIA,
+    METHODOLOGIES,
+    ROLES,
+)
+from llm_integration.data_processing.recommender_system.rec_sys_functions import (
+    extract_vector,
+    filter_user_and_global_dfs,
+    find_best_alternative,
+    find_cluster_representatives,
+    find_recs_within_cluster,
+    recommend_champions_from_main,
+    similar_playstyle_users,
+)
+from llm_integration.data_processing.user_data_compiling.data_collection import (
+    compile_user_data,
+)
+from llm_integration.data_processing.user_data_compiling.pandas_user_data_aggregation import (
+    InsufficientSampleError,
+    aggregate_user_data,
+    find_valid_queues,
+)
 
+# ──────────────────────────────────────────
+# Rapidfuzz Setup
+# ──────────────────────────────────────────
 try:
-    from rapidfuzz import process, fuzz
+    from rapidfuzz import fuzz
     _HAS_RAPIDFUZZ = True
 except Exception:
     import difflib
     _HAS_RAPIDFUZZ = False
 
-# ============================================================
+# ──────────────────────────────────────────
 # Environment setup and Literals/Types
-# ============================================================
+# ──────────────────────────────────────────
 PATCH = "patch_15_6"
 # In production these will need to be taken as inputs 
 CURRENT_PATCH = "15.6"
@@ -49,9 +83,9 @@ OPTIMIZATION_SCOPE = ["CLUSTER", "ROLE"]
 ALL_CHAMPIONS = json.loads(
     (Path(__file__).resolve().parent / "config" / "champion_aliases.json").read_text(encoding="utf-8")
 )
-# ============================================================
+# ──────────────────────────────────────────
 # S3 DATA LOADING AND CACHING
-# ============================================================
+# ──────────────────────────────────────────
 
 class S3Paths:
     def __init__(self, role: str, patch = patch_naming):
@@ -115,9 +149,9 @@ class S3Cache:
 # Initialize cache
 cache = S3Cache()
 
-# ============================================================
+# ──────────────────────────────────────────
 # LLM SETUP
-# ============================================================
+# ──────────────────────────────────────────
 bedrock = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-2"))
 
 def call_llm(prompt: str) -> str:
@@ -136,9 +170,60 @@ def call_llm(prompt: str) -> str:
     return " ".join(t for t in texts if t)
 
 
-# ============================================================
+def find_similar_champions_llm(
+    filtered_df: pd.DataFrame,
+    target_tags: str,
+    target_description: str,
+    top_k: int = 3
+):
+    similarities = []
+
+    for _, row in filtered_df.iterrows():
+        champion_name = row["champion_name"]
+        if pd.isna(champion_name):
+            continue
+
+        champ_tags = row.get("tags", "")
+        champ_description = row.get("description", "")
+
+        prompt = f"""
+You are evaluating semantic similarity between League of Legends champions using only English-language descriptions.
+
+TARGET CHAMPION:
+Tags: {target_tags}
+Description: {target_description}
+
+CANDIDATE CHAMPION:
+Name: {champion_name}
+Tags: {champ_tags}
+Description: {champ_description}
+
+Task:
+Rate how semantically similar the CANDIDATE champion is to the TARGET champion.
+Focus ONLY on meaning, themes, playstyle concepts, and semantic overlap.
+
+Output:
+Respond ONLY with a number between 0 and 1, where:
+- 1 = extremely similar
+- 0 = completely unrelated
+"""
+
+        response = call_llm(prompt)
+
+        # Extract numeric score safely
+        try:
+            score = float(response.strip())
+        except:
+            score = 0.0
+
+        similarities.append((champion_name, score))
+
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    return similarities[:top_k]
+
+# ─────────────────────────────────────────────────────────────
 # Defining shape of state and LLM interaction helper functions
-# ============================================================
+# ─────────────────────────────────────────────────────────────
 class State(TypedDict, total=False):
     role: str
     use_own_data: Optional[bool]
@@ -185,8 +270,10 @@ def ask_and_return(state: State, llm_prompt: str) -> State:
 
 
 # Normalize user inputs
-def _norm(s: str) -> str:
-    return " ".join(s.lower().strip().split())
+def _norm(s):
+    if isinstance(s, str):
+        return " ".join(s.lower().strip().split())
+    return s
 
 
 def _best_matches(user_text: str, choices: list[str], topn: int = 3):
@@ -264,7 +351,7 @@ def _choose_valid(
         key_norm = _norm(user_input)
 
         # exact normalized match
-        if key_norm in choices_norm:
+        if str(key_norm) in choices_norm:
             return value_from_norm(key_norm)
 
         # Check for exact prefix matches first (handles "hwei" -> "Hwei" perfectly)
@@ -323,9 +410,33 @@ def _choose_valid(
 
     raise RetryLimitExceeded(step)
 
-# ============================================================
+
+def find_similar_champions(filtered_df: pd.DataFrame, target_champion: str, top_k: int = 3):
+    """
+    Uses LLM semantic comparison to find the champions most similar
+    to the target champion from a filtered dataframe.
+    """
+
+    # isolate the target row
+    target_row = filtered_df[filtered_df["champion_name"] == target_champion].iloc[0]
+
+    results = []
+
+    for _, row in filtered_df.iterrows():
+        if row["champion_name"] == target_champion:
+            continue
+
+        sim = score_similarity_with_llm(target_row, row)
+        results.append((row["champion_name"], sim))
+
+    # sort highest similarity first
+    results.sort(key=lambda x: x[1], reverse=True)
+
+    return results[:top_k]
+
+# ──────────────────────────────────────────
 # Nodes
-# ============================================================
+# ──────────────────────────────────────────
 # ----- MAIN GRAPH -----
 def ask_role(state: State) -> State:
     
@@ -485,9 +596,9 @@ def pull_tags_and_descriptions(state: State) -> State:
     role = state["role"]
     user_champion = state["user_champion"]
 
-    champions_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
-    champion_description, champion_tags = champions_df.loc[
-        champions_df["id"] == f"{user_champion}__{role}", ["description", "tags"]
+    champion_semantics_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
+    champion_description, champion_tags = champion_semantics_df.loc[
+        champion_semantics_df["id"] == f"{user_champion}__{role}", ["description", "tags"]
     ].squeeze()
 
     _ = _choose_valid( # Placeholder, should be replaced with button on front end
@@ -503,14 +614,20 @@ def pull_tags_and_descriptions(state: State) -> State:
     )
 
     cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
+    cluster_df["id"] = pd.to_numeric(cluster_df["id"], errors="coerce")
     champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals"))
-    print(champion_residuals_df.columns.tolist())
-    cluster_id = champion_residuals_df.loc[
+
+    cluster_id = int(champion_residuals_df.loc[
         champion_residuals_df["champion_name"] == user_champion, ["cluster"]
-    ].squeeze()
-    cluster_description, cluster_tags = cluster_df.loc[
-        cluster_df["id"] == cluster_id, ["description", "tags"]
-    ].squeeze()
+    ].squeeze())
+    cluster_df["id"] = pd.to_numeric(cluster_df["id"], errors="coerce")
+
+    row = cluster_df.loc[cluster_df["id"] == cluster_id, ["description", "tags"]]
+
+    if row.empty:
+        raise ValueError(f"No cluster found for id={cluster_id}")
+
+    cluster_description, cluster_tags = row.iloc[0]
 
     _ = _choose_valid( # Placeholder, should be replaced with button on front end
         state,
@@ -613,19 +730,65 @@ def mathematical_optimization(state: State) -> State:
 
 def natural_language_exploration(state: State) -> State:
     role = state["role"]
-    cluster_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
-    cluster_df["id"] = cluster_df["id"] + 1
+    user_champion = state["user_champion"]
+
+    cluster_semantics_df = pd.DataFrame(cache.get(role, "cluster_semantic_tags_and_desc"))
+    cluster_semantics_df["id"] = cluster_semantics_df["id"].astype(str)
+    
     print(f"Please find all {role.capitalize()} clusters with their descriptions and semantic tags below:")
-    print(cluster_df)
+    print(cluster_semantics_df)
 
     cluster_id = _choose_valid(
         state,
         f"Ask user to select the cluster id of the cluster they preferred",
-        cluster_df["id"].tolist(),
+        cluster_semantics_df["id"].tolist(),
         f"Say 'Please select a valid cluster id' exactly",
-        "cluster_selection"
+        "natural_language_exploration"
     )
-    return
+
+    champion_residuals_df = pd.DataFrame(cache.get(role, "champion_residuals"))
+
+    filtered_residuals_df = champion_residuals_df.loc[
+        (champion_residuals_df["cluster"] == cluster_id) |
+        (champion_residuals_df["champion_name"] == user_champion)
+    ]
+    cluster_champions = filtered_residuals_df["champion_name"].tolist()
+
+    similarity_criterion = _choose_valid(
+        state,
+        f"Ask user if they would prefer champions from this cluster that are most similar to theirs",
+        BINARY_REPLIES,
+        f"Say 'Please answer with yes or no' exactly",
+        "natural_language_exploration"
+    )
+
+    if similarity_criterion:
+        champion_semantics_df = pd.DataFrame(cache.get(role, "champ_semantic_tags_and_desc"))
+        champion_semantics_df["champion_name"] = champion_semantics_df["id"].str.split("__", n=1).str[0]
+
+        champion_semantics_df = (
+            champion_semantics_df[champion_semantics_df["champion_name"].isin(cluster_champions) & 
+                                  champion_semantics_df["champion_name"] != user_champion
+            ]
+        )
+
+        champion_description = state["champion_description"]
+        champion_tags = state["champion_tags"]
+
+        recommendation = find_similar_champions_llm(
+            champion_semantics_df,
+            champion_description,
+            champion_tags,
+            top_k=3
+        )
+
+    else:
+        recommendation = find_cluster_representatives(filtered_residuals_df, cluster_id, user_champion, top_k=3)
+
+    return {
+            "end": True, "final_rec": recommendation
+    }
+
 #global_users_df = pd.DataFrame(cache.get(role, "champion_residuals"))
 
 #global_users_df = pd.DataFrame(cache.get(role, "clusters"))
@@ -679,6 +842,7 @@ graph.add_conditional_edges(
 )
 graph.add_edge("collaborative_filtering", END)
 graph.add_edge("mathematical_optimization", END)
+graph.add_edge("natural_language_exploration", END)
 app = graph.compile()
 g = app.get_graph()
 g.print_ascii()

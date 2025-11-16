@@ -235,6 +235,123 @@ def find_recs_within_cluster(df, user_champion):
     different_champs = different_champs.drop(user_champion).sort_values(ascending=False).head(3).index.tolist()
 
     return similar_champs, different_champs
+
+# ======== Strengths/Weaknesses comparison ========
+
+def extract_features(row):
+    """
+    Extract features from a champion/cluster row
+    Returns dict with feature names as keys and values as values
+    """
+    features = {}
     
+    # Extract strengths (positive values)
+    for i in range(1, 11):
+        name = row.get(f'strength_{i}_name')
+        value = row.get(f'strength_{i}_value', 0)
+        if pd.notna(name) and pd.notna(value):
+            features[f'STR_{name}'] = float(value)
+    
+    # Extract weaknesses (negative values)
+    for i in range(1, 11):
+        name = row.get(f'weakness_{i}_name')
+        value = row.get(f'weakness_{i}_value', 0)
+        if pd.notna(name) and pd.notna(value):
+            features[f'WEAK_{name}'] = float(value)
+    
+    return features
+
+
+def calculate_similarity(features1, features2):
+    """
+    Calculate similarity between two feature dictionaries
+    Uses cosine similarity on shared features + Jaccard with log scaling
+    """
+    # Get all unique features
+    all_features = set(features1.keys()) | set(features2.keys())
+    if not all_features:
+        return 0.0
+    
+    # Build aligned vectors
+    vec1 = []
+    vec2 = []
+    
+    for feature in all_features:
+        val1 = features1.get(feature, 0)
+        val2 = features2.get(feature, 0)
+        
+        # Apply log scaling to reduce outlier impact
+        if val1 != 0:
+            val1 = np.sign(val1) * np.log1p(abs(val1))
+        if val2 != 0:
+            val2 = np.sign(val2) * np.log1p(abs(val2))
+        
+        vec1.append(val1)
+        vec2.append(val2)
+    
+    # Convert to numpy arrays
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    
+    # Calculate cosine similarity
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    cosine_sim = dot_product / (norm1 * norm2)
+    
+    # Convert to 0-1 range
+    return (cosine_sim + 1) / 2
+
+
+def find_cluster_representatives(filtered_residuals_df, cluster_id, user_champion, top_k=3):
+    """
+    Find champions whose residual vectors are closest to zero.
+    Champions perfectly matching the cluster have residuals = 0.
+    """
+
+    # Filter champions in the cluster
+    champ_rows = filtered_residuals_df[
+        filtered_residuals_df["cluster"] == str(cluster_id)
+    ]
+
+    similarities = []
+
+    for _, row in champ_rows.iterrows():
+        if row["champion_name"] == user_champion:
+            continue
+
+        # Extract residual features as a vector
+        residuals = []
+
+        for i in range(1, 11):
+            # Strength residuals (positive means better than cluster)
+            val = row.get(f"strength_{i}_value")
+            if pd.notna(val):
+                residuals.append(float(val))
+
+            # Weakness residuals (negative means worse than cluster)
+            val = row.get(f"weakness_{i}_value")
+            if pd.notna(val):
+                residuals.append(float(val))
+
+        residuals = np.array(residuals, dtype=float)
+
+        # Compute distance to zero (smaller = better)
+        distance = np.sum(residuals ** 2)
+
+        similarities.append((row["champion_name"], distance))
+
+    # Sort ascending (closest to zero is best)
+    similarities.sort(key=lambda x: x[1])
+
+    # Return top K representatives
+    return similarities[:top_k]
+
+
+
 
 
