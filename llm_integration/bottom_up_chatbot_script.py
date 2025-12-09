@@ -411,29 +411,6 @@ def _choose_valid(
     raise RetryLimitExceeded(step)
 
 
-def find_similar_champions(filtered_df: pd.DataFrame, target_champion: str, top_k: int = 3):
-    """
-    Uses LLM semantic comparison to find the champions most similar
-    to the target champion from a filtered dataframe.
-    """
-
-    # isolate the target row
-    target_row = filtered_df[filtered_df["champion_name"] == target_champion].iloc[0]
-
-    results = []
-
-    for _, row in filtered_df.iterrows():
-        if row["champion_name"] == target_champion:
-            continue
-
-        sim = score_similarity_with_llm(target_row, row)
-        results.append((row["champion_name"], sim))
-
-    # sort highest similarity first
-    results.sort(key=lambda x: x[1], reverse=True)
-
-    return results[:top_k]
-
 # ──────────────────────────────────────────
 # Nodes
 # ──────────────────────────────────────────

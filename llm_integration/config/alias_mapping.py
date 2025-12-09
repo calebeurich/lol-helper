@@ -24,9 +24,9 @@ QUEUES = {
 }
 
 CHAMPION_CRITERIA = {
-    "win_rate": "win_rate", "win rate": "win_rate", "winrate": "win_rate", "wr": "win_rate", "win": "win_rate",
-    "play rate": "role_play_rate", "play_rate": "role_play_rate", "playrate": "role_play_rate", "play": "role_play_rate",
-    "manual selection": "user_choice", "manual": "user_choice", "manualselection": "user_choice", "selection": "user_choice"
+    "Win Rate": "win_rate",
+    "Play Rate": "role_play_rate",
+    "Manual Champion Selection": "manual_selection"
 }
 
 METHODOLOGIES = {

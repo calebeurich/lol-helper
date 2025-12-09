@@ -588,8 +588,6 @@ def collect_match_ids(summoner_data_file: str, patch_start_time: str,
                     context=f"puuid {puuid}"
                 )
 
-                if error_type is not None:
-                    track_failed_match(puuid, error_type, current_patch, "match_id")
                 
                 # Find row matching this PUUID
                 row_data = df_summoners[df_summoners["puuid"] == puuid].iloc[0]
